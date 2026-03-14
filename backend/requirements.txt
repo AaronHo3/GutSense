@@ -1,0 +1,15 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+pydantic==2.10.3
+anthropic==0.40.0
+numpy==2.2.0
+scipy==1.14.1
+python-dotenv==1.0.1
+requests==2.32.3
+openai>=1.0.0
+intersystems-irispython>=3.8.0
+sqlalchemy-iris>=0.18.0
+langchain-iris>=0.2.0
+langchain-openai>=0.1.0
+langchain>=0.2.0
