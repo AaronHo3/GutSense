@@ -188,7 +188,7 @@ function PatientDrawer({
               {tab === 'summary' && (
                 <div className="space-y-4">
 
-                  {/* RAG summary (LangChain + IRIS Vector Search) */}
+                  {/* RAG summary (IRIS Vector Search) */}
                   {detail.rag_summary ? (
                     <div
                       className="p-3 rounded-lg"
@@ -197,7 +197,7 @@ function PatientDrawer({
                       <div className="flex items-center gap-1.5 mb-2">
                         <Sparkles className="w-3.5 h-3.5 text-violet-400" />
                         <p className="text-xs text-violet-400 font-medium">
-                          {detail.rag_powered_by || 'AI Summary'}
+                          IRIS Vector Search
                         </p>
                       </div>
                       <p className="text-sm text-slate-300 leading-relaxed">{detail.rag_summary}</p>
@@ -523,7 +523,7 @@ export function IrisDashboard() {
           {status.connected && status.langchain_rag && (
             <span className="ml-auto flex items-center gap-1 text-xs text-violet-400">
               <Sparkles className="w-3 h-3" />
-              LangChain RAG
+              IRIS Vector Search
             </span>
           )}
         </div>
