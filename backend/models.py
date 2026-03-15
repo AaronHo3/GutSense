@@ -33,12 +33,14 @@ class BiomarkerReading(Base):
     visit_number = Column(Integer, nullable=False, default=1)
 
     # Primary biomarkers
-    hemoglobin_ng_ml = Column(Float, nullable=False)       # occult blood; normal <20
-    butyrate_mmol_kg = Column(Float, nullable=False)       # SCFA; normal >15
-    calprotectin_ug_g = Column(Float, nullable=False)      # inflammation; normal <50
-    basidio_ascomy_ratio = Column(Float, nullable=False)   # fungal dysbiosis; normal <1.5
-    proteobacteria_index = Column(Float, nullable=False)   # pathobionts 0-1; normal <0.2
-    methylation_score = Column(Float, nullable=False)      # SEPT9+SDC2, 0-1; normal <0.25
+    mpo_ng_ml = Column(Float, nullable=False)              # Myeloperoxidase; normal <100
+    haptoglobin_ug_g = Column(Float, nullable=False)       # Haptoglobin (fecal); normal <50
+    fibrinogen_ng_ml = Column(Float, nullable=False)       # Fibrinogen (fecal); normal <100
+    mmp9_ng_ml = Column(Float, nullable=False)             # MMP-9; normal <30
+    hemoglobin_fit_ng_ml = Column(Float, nullable=False)   # Hemoglobin FIT; normal <10
+    mmp8_ng_ml = Column(Float, nullable=False)             # MMP-8; normal <30
+    pgrp_s_ng_ml = Column(Float, nullable=False)           # PGRP-S; normal <20
+    calprotectin_ug_g = Column(Float, nullable=False)      # Calprotectin; normal <50
 
     patient = relationship("Patient", back_populates="readings")
     risk_assessment = relationship("RiskAssessment", back_populates="reading", uselist=False)

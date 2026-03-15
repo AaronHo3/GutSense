@@ -31,11 +31,11 @@ def compute_trajectory(db: Session, patient_id: int, current_risk_score: float) 
     x = np.arange(len(scores), dtype=float)
     slope, _ = np.polyfit(x, scores, 1)
 
-    if slope > 3.0:
+    if slope > 0.50:
         return "Rapidly Increasing"
-    elif slope > 0.8:
+    elif slope > 0.07:
         return "Slowly Increasing"
-    elif slope < -0.8:
+    elif slope < -0.07:
         return "Improving"
     else:
         return "Stable"

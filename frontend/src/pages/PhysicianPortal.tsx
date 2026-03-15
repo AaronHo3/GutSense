@@ -166,10 +166,10 @@ export function PhysicianPortal() {
                 {/* Mini biomarker summary */}
                 {latest_reading && (
                   <div className="mt-2.5 pt-2 flex gap-3 text-xs text-slate-500 flex-wrap" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span>Hgb: <span className="text-slate-300 font-medium">{latest_reading.hemoglobin_ng_ml.toFixed(0)}</span> ng/mL</span>
-                    <span>But: <span className="text-slate-300 font-medium">{latest_reading.butyrate_mmol_kg.toFixed(1)}</span> mmol/kg</span>
+                    <span>Hgb-FIT: <span className="text-slate-300 font-medium">{latest_reading.hemoglobin_fit_ng_ml.toFixed(0)}</span> ng/mL</span>
+                    <span>MPO: <span className="text-slate-300 font-medium">{latest_reading.mpo_ng_ml.toFixed(0)}</span> ng/mL</span>
                     <span>Cal: <span className="text-slate-300 font-medium">{latest_reading.calprotectin_ug_g.toFixed(0)}</span> µg/g</span>
-                    <span>Meth: <span className="text-slate-300 font-medium">{latest_reading.methylation_score.toFixed(3)}</span></span>
+                    <span>MMP-9: <span className="text-slate-300 font-medium">{latest_reading.mmp9_ng_ml.toFixed(0)}</span> ng/mL</span>
                   </div>
                 )}
               </div>

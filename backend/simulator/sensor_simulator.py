@@ -103,33 +103,40 @@ def run_live():
     states: dict[str, BiomarkerState] = {}
     visit_counts: dict[str, int] = {}
     for profile in DEMO_PATIENTS:
-        states[profile["name"]] = BiomarkerState(
+        state = BiomarkerState(
             archetype=profile["archetype"],
             enable_drift=profile.get("drift", False),
         )
+        # Resume drift from end of backfill so drifting patients continue their upward trend
+        if profile.get("drift", False):
+            state._visit_count = 180  # 90 days × 2 visits/day
+        states[profile["name"]] = state
         visit_counts[profile["name"]] = 0
 
     while True:
-        for profile in DEMO_PATIENTS:
-            patient_id = name_to_id.get(profile["name"])
-            if patient_id is None:
-                continue
-            visit_counts[profile["name"]] += 1
-            reading = states[profile["name"]].next_reading()
-            payload = {
-                "patient_id": patient_id,
-                "timestamp": datetime.utcnow().isoformat(),
-                "visit_number": visit_counts[profile["name"]],
-                **reading,
-            }
-            if _post_reading(payload):
-                score_label = ""
-                print(
-                    f"[simulator] {profile['name']} visit #{visit_counts[profile['name']]} "
-                    f"— hgb={reading['hemoglobin_ng_ml']:.1f} "
-                    f"but={reading['butyrate_mmol_kg']:.1f} "
-                    f"cal={reading['calprotectin_ug_g']:.0f}"
-                )
+        try:
+            for profile in DEMO_PATIENTS:
+                patient_id = name_to_id.get(profile["name"])
+                if patient_id is None:
+                    continue
+                visit_counts[profile["name"]] += 1
+                reading = states[profile["name"]].next_reading()
+                payload = {
+                    "patient_id": patient_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "visit_number": visit_counts[profile["name"]],
+                    **reading,
+                }
+                if _post_reading(payload):
+                    print(
+                        f"[simulator] {profile['name']} visit #{visit_counts[profile['name']]} "
+                        f"— hgb={reading['hemoglobin_fit_ng_ml']:.1f} "
+                        f"mpo={reading['mpo_ng_ml']:.1f} "
+                        f"cal={reading['calprotectin_ug_g']:.0f}"
+                    )
+                time.sleep(0.5)  # stagger writes to avoid SQLite burst pressure
+        except Exception as e:
+            print(f"[simulator] Error in live loop: {e}")
 
         time.sleep(INTERVAL_SECONDS)
 

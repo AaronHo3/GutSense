@@ -75,15 +75,14 @@ def generate_risk_narrative(
     risk_level: str,
     trajectory: str,
     confounded_by: Optional[str] = None,
+    rag_context: list = None,
 ) -> dict:
     """
     Returns dict with keys: patient_explanation, physician_summary,
     next_steps, urgency_flag.
     Falls back to rule-based text if Claude is unavailable.
+    rag_context: list of similar historical cases from IRIS vector search.
     """
-    # Short-circuit: return fallback text immediately (no Claude API call)
-    return _fallback_narrative(risk_level, trajectory, confounded_by)
-
     # Check cache
     if reading_id in _cache:
         ts, result = _cache[reading_id]
@@ -97,19 +96,31 @@ def generate_risk_narrative(
         "red": "Critical (urgent referral required)",
     }
 
+    rag_section = ""
+    if rag_context:
+        cases = []
+        for i, c in enumerate(rag_context, 1):
+            cases.append(
+                f"  {i}. {c['risk_level'].upper()} risk (score {c['risk_score']:.0f}/100), "
+                f"trajectory: {c['trajectory']}. Clinical outcome: {c['outcome']}"
+            )
+        rag_section = "\nSimilar historical cases (from IRIS vector search):\n" + "\n".join(cases) + "\n"
+
     prompt = f"""You are a clinical AI assistant analyzing stool biomarker data for colorectal cancer screening.
 Never provide a diagnosis. Always recommend professional medical consultation.
 Be evidence-based, clear, and appropriately reassuring or urgent based on the data.
-
+{rag_section}
 Patient: {patient_name}, {patient_age}{'M' if patient_sex == 'M' else 'F'}, family history of CRC: {'Yes' if family_history else 'No'}
 
 Current stool biomarker readings:
-- Occult blood (hemoglobin): {biomarkers['hemoglobin_ng_ml']:.1f} ng/mL  [normal <20, concerning >50, alarm >100]
-- Butyrate (protective SCFA): {biomarkers['butyrate_mmol_kg']:.1f} mmol/kg  [normal >15, concerning <10, alarm <5]
-- Calprotectin (inflammation): {biomarkers['calprotectin_ug_g']:.0f} µg/g  [normal <50, concerning >100, alarm >200]
-- Fungal dysbiosis index (Basidiomycota/Ascomycota): {biomarkers['basidio_ascomy_ratio']:.2f}  [normal <1.5, concerning >2.0, alarm >3.0]
-- Proteobacteria index: {biomarkers['proteobacteria_index']:.3f}  [normal <0.2, concerning >0.35, alarm >0.5]
-- DNA methylation score (SEPT9/SDC2): {biomarkers['methylation_score']:.3f}  [normal <0.25, concerning >0.35, alarm >0.5]
+- MPO (Myeloperoxidase): {biomarkers['mpo_ng_ml']:.1f} ng/mL  [normal <100, concerning >300, alarm >500]
+- Haptoglobin (fecal): {biomarkers['haptoglobin_ug_g']:.1f} µg/g  [normal <50, concerning >120, alarm >200]
+- Fibrinogen (fecal): {biomarkers['fibrinogen_ng_ml']:.1f} ng/mL  [normal <100, concerning >250, alarm >400]
+- MMP-9: {biomarkers['mmp9_ng_ml']:.1f} ng/mL  [normal <30, concerning >80, alarm >150]
+- Hemoglobin FIT: {biomarkers['hemoglobin_fit_ng_ml']:.1f} ng/mL  [normal <10, concerning >50, alarm >100]
+- MMP-8: {biomarkers['mmp8_ng_ml']:.1f} ng/mL  [normal <30, concerning >80, alarm >150]
+- PGRP-S: {biomarkers['pgrp_s_ng_ml']:.1f} ng/mL  [normal <20, concerning >55, alarm >100]
+- Calprotectin: {biomarkers['calprotectin_ug_g']:.0f} µg/g  [normal <50, concerning >100, alarm >200]
 
 Composite risk score: {risk_score:.0f}/100 — {risk_label_map.get(risk_level, risk_level)}
 7-day trend: {trajectory}
@@ -151,20 +162,137 @@ Use the risk_assessment_output tool to provide your structured assessment."""
     return _fallback_narrative(risk_level, trajectory, confounded_by)
 
 
+def generate_referral(
+    patient_name: str,
+    patient_age: int,
+    patient_sex: str,
+    family_history: bool,
+    has_nod2_variant: bool,
+    biomarkers: dict,
+    risk_score: float,
+    risk_level: str,
+    trajectory: str,
+    physician_summary: str,
+    next_steps: list,
+) -> str:
+    """
+    Generate a formal GI referral letter. Returns the letter as a plain string.
+    Falls back to a structured template if Claude is unavailable.
+    """
+    from datetime import date
+    today = date.today().strftime("%B %d, %Y")
+    sex_label = "male" if patient_sex == "M" else "female"
+    urgency_map = {
+        "green":  ("Routine", "within 3–6 months"),
+        "yellow": ("Non-urgent", "within 3 months"),
+        "orange": ("Semi-urgent", "within 2 weeks"),
+        "red":    ("URGENT", "as soon as possible — within 48–72 hours"),
+    }
+    urgency_label, urgency_timeline = urgency_map.get(risk_level, ("Routine", "within 3 months"))
+
+    prompt = f"""You are a clinical documentation assistant. Write a formal GI specialist referral letter on behalf of a primary care physician using the patient data below.
+
+The letter must follow this exact structure:
+1. Date and header (To: Gastroenterology, From: Primary Care Physician, Re: patient)
+2. Opening: reason for referral in one sentence
+3. Clinical findings paragraph: summarize the biomarker results and composite risk score in clinical language
+4. Urgency and requested evaluation
+5. Closing with signature line for the physician
+
+Patient: {patient_name}, {patient_age}-year-old {sex_label}
+Family history of CRC: {'Yes' if family_history else 'No'}
+NOD2 variant: {'Yes' if has_nod2_variant else 'No'}
+
+Biomarker results:
+- Hemoglobin FIT: {biomarkers['hemoglobin_fit_ng_ml']:.1f} ng/mL (normal <10)
+- Calprotectin: {biomarkers['calprotectin_ug_g']:.0f} µg/g (normal <50)
+- MPO: {biomarkers['mpo_ng_ml']:.1f} ng/mL (normal <100)
+- MMP-9: {biomarkers['mmp9_ng_ml']:.1f} ng/mL (normal <30)
+- MMP-8: {biomarkers['mmp8_ng_ml']:.1f} ng/mL (normal <30)
+- Fibrinogen (fecal): {biomarkers['fibrinogen_ng_ml']:.1f} ng/mL (normal <100)
+- Haptoglobin (fecal): {biomarkers['haptoglobin_ug_g']:.1f} µg/g (normal <50)
+- PGRP-S: {biomarkers['pgrp_s_ng_ml']:.1f} ng/mL (normal <20)
+
+Composite GutSense risk score: {risk_score:.0f}/100
+7-day trend: {trajectory}
+Urgency: {urgency_label} — {urgency_timeline}
+
+Clinical assessment: {physician_summary}
+
+Write the letter in formal medical language. Today's date is {today}. Do not include a subject line like "Subject:" — use "Re:" inline in the header."""
+
+    try:
+        c = _get_client()
+        response = c.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"[claude_client] Referral generation failed: {e}")
+
+    # Fallback template
+    elevated = [
+        name for name, val, threshold in [
+            ("Hemoglobin FIT", biomarkers['hemoglobin_fit_ng_ml'], 10),
+            ("Calprotectin", biomarkers['calprotectin_ug_g'], 50),
+            ("MPO", biomarkers['mpo_ng_ml'], 100),
+            ("MMP-9", biomarkers['mmp9_ng_ml'], 30),
+            ("MMP-8", biomarkers['mmp8_ng_ml'], 30),
+            ("Fibrinogen", biomarkers['fibrinogen_ng_ml'], 100),
+            ("Haptoglobin", biomarkers['haptoglobin_ug_g'], 50),
+            ("PGRP-S", biomarkers['pgrp_s_ng_ml'], 20),
+        ] if val > threshold
+    ]
+    elevated_str = ", ".join(elevated) if elevated else "multiple markers"
+    fhx = "with a positive family history of colorectal cancer" if family_history else ""
+    nod2 = " and a known NOD2 variant" if has_nod2_variant else ""
+    return f"""{today}
+
+To: Gastroenterology Department
+From: Primary Care Physician (via GutSense Monitoring Platform)
+Re: {patient_name} — GI Referral
+
+Dear Gastroenterology Colleague,
+
+I am writing to refer {patient_name}, a {patient_age}-year-old {sex_label} {fhx}{nod2}, for gastroenterological evaluation following abnormal stool biomarker results obtained through continuous GutSense monitoring.
+
+Clinical Findings:
+The patient's composite GutSense risk score is {risk_score:.0f}/100 (risk level: {risk_level.upper()}), with a 7-day trend of {trajectory}. Notably elevated biomarkers include: {elevated_str}. {physician_summary}
+
+Urgency: {urgency_label}
+Please evaluate {urgency_timeline}. Diagnostic colonoscopy is recommended given the above findings.
+
+Requested Evaluation:
+- Gastroenterological consultation
+- Diagnostic colonoscopy
+- Correlation with clinical history and symptom review
+
+Thank you for your prompt attention to this referral. Please contact our office with any questions.
+
+Sincerely,
+
+_______________________________
+Primary Care Physician
+GutSense Monitoring Program
+"""
+
+
 def _fallback_narrative(risk_level: str, trajectory: str, confounded_by: Optional[str]) -> dict:
     """Medically realistic rule-based narratives when Claude is unavailable."""
     if risk_level == "green":
         patient_exp = (
-            "Your stool biomarker profile is within normal ranges across all six monitored channels. "
-            "Occult blood (hemoglobin) is undetectable, butyrate levels are protective at healthy concentrations, "
-            "and your epigenetic methylation score for SEPT9/SDC2 remains well below the threshold of concern. "
+            "Your stool biomarker profile is within normal ranges across all eight monitored channels. "
+            "Hemoglobin FIT (occult blood) is undetectable, inflammatory markers MPO and calprotectin are at healthy levels, "
+            "and tissue-remodeling enzymes MMP-8 and MMP-9 show no signs of mucosal degradation. "
             "Continue your current dietary habits and maintain your routine annual screening schedule."
         )
         physician_sum = (
-            "All six biomarker channels are within reference ranges: hemoglobin <20 ng/mL, butyrate within protective range (>15 mmol/kg), "
-            "calprotectin <50 µg/g, fungal dysbiosis index <1.5, proteobacteria index <0.2, and SEPT9/SDC2 methylation score <0.25. "
-            f"Trajectory is {trajectory}. "
-            "No clinical action required at this time. Routine monitoring recommended per standard CRC screening guidelines."
+            "All eight biomarker channels within reference ranges: Hgb-FIT <10 ng/mL, MPO <100 ng/mL, "
+            "calprotectin <50 µg/g, MMP-9 <30 ng/mL, MMP-8 <30 ng/mL, haptoglobin <50 µg/g, "
+            f"fibrinogen <100 ng/mL, PGRP-S <20 ng/mL. Trajectory: {trajectory}. "
+            "No clinical action required. Routine monitoring per standard CRC screening guidelines."
         )
         steps = ["Maintain routine annual screening", "Continue high-fiber diet (>25g/day)", "Reassess in 12 months"]
         urgency = "routine"
@@ -176,12 +304,12 @@ def _fallback_narrative(risk_level: str, trajectory: str, confounded_by: Optiona
             "We recommend scheduling a check-in with your physician within the next three months for further evaluation."
         )
         physician_sum = (
-            "Mildly elevated biomarker readings noted across one or more channels. Likely candidates include calprotectin elevation "
-            "above 50 µg/g (suggesting low-grade mucosal inflammation) or a butyrate level trending below the 15 mmol/kg protective threshold. "
-            f"Trajectory: {trajectory}. Longitudinal trend monitoring warranted. "
-            "Consider stool FIT confirmation and dietary review. GI consultation within 3 months if trend continues."
+            "Mildly elevated readings in one or more inflammatory channels. Likely candidates include calprotectin "
+            "above 50 µg/g (low-grade mucosal inflammation), MPO trending above 100 ng/mL (neutrophil activation), "
+            f"or MMP-9/MMP-8 showing early ECM remodeling activity. Trajectory: {trajectory}. "
+            "Longitudinal trend monitoring warranted. GI consultation within 3 months if trend continues."
         )
-        steps = ["Schedule physician consultation within 3 months", "Increase dietary fiber intake to >25g/day", "Consider stool FIT confirmatory test"]
+        steps = ["Schedule physician consultation within 3 months", "Increase dietary fiber intake to >25g/day", "Consider confirmatory FIT test"]
         urgency = "elevated"
 
     elif risk_level == "orange":
@@ -191,29 +319,29 @@ def _fallback_narrative(risk_level: str, trajectory: str, confounded_by: Optiona
             "Early evaluation gives the best outcomes."
         )
         physician_sum = (
-            "Multiple biomarker channels are elevated above clinical reference thresholds. "
-            "Findings are consistent with active mucosal inflammation (calprotectin >100 µg/g), possible occult bleeding (hemoglobin trending upward), "
-            "and microbiome dysbiosis (proteobacteria or fungal index elevated). "
-            f"Trajectory: {trajectory}. "
-            "Recommend urgent GI consultation within 2 weeks. "
-            "Consider FIT confirmation, fecal calprotectin quantification, and colonoscopy referral if FIT positive."
+            "Multiple biomarker channels elevated above clinical thresholds. Findings suggest active mucosal inflammation "
+            "(calprotectin >100 µg/g, MPO >300 ng/mL), possible occult bleeding (Hgb-FIT trending upward), "
+            f"and matrix remodeling activity (MMP-9 or MMP-8 elevated). Trajectory: {trajectory}. "
+            "Urgent GI consultation within 2 weeks. Consider confirmatory FIT, quantitative calprotectin, "
+            "and colonoscopy referral if FIT positive."
         )
-        steps = ["Schedule GI physician visit within 2 weeks", "Order stool FIT and quantitative calprotectin", "Review medication and recent antibiotic history"]
+        steps = ["Schedule GI physician visit within 2 weeks", "Order confirmatory FIT and quantitative calprotectin", "Review medication and recent antibiotic history"]
         urgency = "urgent"
 
     else:  # red
         patient_exp = (
             "Your biomarker readings are critically elevated and require prompt medical attention. "
-            "Key indicators — including occult blood, protective butyrate depletion, and epigenetic methylation markers (SEPT9/SDC2) — "
-            "are all significantly outside normal ranges. Please contact your doctor or go to an urgent care clinic today."
+            "Key indicators — including occult blood (Hemoglobin FIT), the inflammatory enzymes MPO, MMP-8 and MMP-9, "
+            "and fecal haptoglobin — are all significantly outside normal ranges. "
+            "Please contact your doctor or go to an urgent care clinic today."
         )
         physician_sum = (
-            "Critical elevation across multiple high-weight biomarker channels: hemoglobin likely >100 ng/mL (active occult bleeding), "
-            "butyrate severely depleted (<5 mmol/kg, indicating loss of colonocyte protection), "
-            "and SEPT9/SDC2 methylation score elevated (>0.5, consistent with epigenetic silencing patterns associated with CRC). "
-            f"Trajectory: {trajectory}. "
-            "Findings warrant urgent clinical evaluation. Immediate GI referral and diagnostic colonoscopy strongly recommended. "
-            "Do not delay — early-stage CRC detection at this point is associated with >90% 5-year survival."
+            "Critical elevation across multiple high-weight channels: Hgb-FIT likely >100 ng/mL (active occult bleeding), "
+            "MPO >500 ng/mL (severe neutrophil-mediated oxidative stress), MMP-9 and MMP-8 markedly elevated "
+            "(aggressive ECM degradation consistent with invasive lesion), calprotectin >200 µg/g, "
+            f"fibrinogen and haptoglobin acutely elevated. Trajectory: {trajectory}. "
+            "Findings warrant immediate clinical evaluation. Urgent GI referral and diagnostic colonoscopy strongly recommended. "
+            "Do not delay — early-stage detection is associated with >90% 5-year survival."
         )
         steps = ["Contact physician immediately — urgent referral required", "Schedule diagnostic colonoscopy", "Do not delay evaluation — urgent findings"]
         urgency = "urgent"

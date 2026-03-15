@@ -80,9 +80,18 @@ def is_connected() -> bool:
 def clear_cache():
     global _engine, _seeded, _vector_supported
     _cache.clear()
-    _engine = None
     _seeded = False
-    _vector_supported = None  # Bug #4: was not reset, caused stale vector-support state
+    _vector_supported = None
+    # Drop and recreate the table so stale rows from old schema don't persist
+    try:
+        eng = _get_engine()
+        with eng.connect() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS {TABLE}"))
+            conn.commit()
+        logger.info(f"[IRIS] Dropped {TABLE} for reseed")
+    except Exception as e:
+        logger.warning(f"[IRIS] Could not drop table during clear: {e}")
+    _engine = None
 
 
 # ---------------------------------------------------------------------------
@@ -206,9 +215,10 @@ def _load_from_sqlite() -> list:
             ra.adjusted_score, ra.risk_level, ra.trajectory,
             ra.patient_explanation, ra.physician_summary,
             ra.next_steps, ra.confounded_by,
-            br.hemoglobin_ng_ml, br.butyrate_mmol_kg,
-            br.calprotectin_ug_g, br.basidio_ascomy_ratio,
-            br.proteobacteria_index, br.methylation_score
+            br.mpo_ng_ml, br.haptoglobin_ug_g,
+            br.fibrinogen_ng_ml, br.mmp9_ng_ml,
+            br.hemoglobin_fit_ng_ml, br.mmp8_ng_ml,
+            br.pgrp_s_ng_ml, br.calprotectin_ug_g
         FROM patients p
         LEFT JOIN risk_assessments ra ON ra.patient_id = p.id
             AND ra.id = (
@@ -232,13 +242,15 @@ def _load_from_sqlite() -> list:
                 next_steps = [r["next_steps"]]
 
         biomarker_text = (
-            f"Hemoglobin {r['hemoglobin_ng_ml']:.1f}ng/mL, "
-            f"Butyrate {r['butyrate_mmol_kg']:.2f}mmol/kg, "
+            f"Hgb-FIT {r['hemoglobin_fit_ng_ml']:.1f}ng/mL, "
             f"Calprotectin {r['calprotectin_ug_g']:.0f}μg/g, "
-            f"Fungal ratio {r['basidio_ascomy_ratio']:.2f}, "
-            f"Proteobacteria {r['proteobacteria_index']:.3f}, "
-            f"Methylation {r['methylation_score']:.3f}"
-        ) if r["hemoglobin_ng_ml"] is not None else "No biomarker data"
+            f"MMP-9 {r['mmp9_ng_ml']:.1f}ng/mL, "
+            f"MPO {r['mpo_ng_ml']:.1f}ng/mL, "
+            f"MMP-8 {r['mmp8_ng_ml']:.1f}ng/mL, "
+            f"Fibrinogen {r['fibrinogen_ng_ml']:.1f}ng/mL, "
+            f"Haptoglobin {r['haptoglobin_ug_g']:.1f}μg/g, "
+            f"PGRP-S {r['pgrp_s_ng_ml']:.1f}ng/mL"
+        ) if r["hemoglobin_fit_ng_ml"] is not None else "No biomarker data"
 
         key_findings = next_steps[:4] if next_steps else ["No significant findings"]
         summary = (
@@ -467,6 +479,158 @@ def _row_to_dict(row) -> dict:
         "recommendation":           recommendation or "",
         "risk_factors":             findings[:3],
         "diagnostic_reports_count": 1,
-        "observations_count":       6,
+        "observations_count":       8,
         "biomarker_text":           biomarker_text or "",
     }
+
+
+# ---------------------------------------------------------------------------
+# FHIR Observation store + RAG retrieval (new table: GutSenseObservations)
+# ---------------------------------------------------------------------------
+
+OBS_TABLE = "SQLUser.GutSenseObservations"
+
+
+def _obs_table_exists() -> bool:
+    try:
+        with _get_engine().connect() as conn:
+            result = conn.execute(text("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = 'SQLUser' AND TABLE_NAME = 'GutSenseObservations'
+            """))
+            return result.fetchone()[0] > 0
+    except Exception:
+        return False
+
+
+def _create_obs_table():
+    vector_col = f", ClinicalVector VECTOR(DOUBLE, {VECTOR_DIM})" if _has_vector() else ""
+    ddl = f"""
+        CREATE TABLE {OBS_TABLE} (
+            ObsId        VARCHAR(50),
+            PatientId    VARCHAR(50),
+            PatientName  VARCHAR(100),
+            RiskLevel    VARCHAR(20),
+            RiskScore    FLOAT,
+            Trajectory   VARCHAR(50),
+            ClinicalText VARCHAR(4000),
+            OutcomeText  VARCHAR(2000),
+            ObsTimestamp VARCHAR(50)
+            {vector_col}
+        )
+    """
+    with _get_engine().connect() as conn:
+        conn.execute(text(ddl))
+        conn.commit()
+    logger.info(f"[IRIS] Created {OBS_TABLE}")
+
+
+def store_observation(
+    patient_id: str,
+    patient_name: str,
+    risk_level: str,
+    risk_score: float,
+    trajectory: str,
+    clinical_text: str,
+    outcome_text: str,
+) -> bool:
+    """
+    Store a FHIR-formatted biomarker observation in IRIS with its vector embedding.
+    Called after Claude generates the narrative so outcome_text is populated.
+    This observation joins the RAG pool for future similar-case retrieval.
+    """
+    try:
+        if not is_connected():
+            return False
+        eng = _get_engine()
+        use_vec = _has_vector()
+
+        if not _obs_table_exists():
+            _create_obs_table()
+
+        import uuid
+        from datetime import datetime, timezone
+
+        obs_id = str(uuid.uuid4())
+        timestamp = datetime.now(timezone.utc).isoformat()
+        vec = _embed(clinical_text) if use_vec else None
+
+        with eng.connect() as conn:
+            if use_vec and vec:
+                conn.execute(text(f"""
+                    INSERT INTO {OBS_TABLE}
+                      (ObsId, PatientId, PatientName, RiskLevel, RiskScore,
+                       Trajectory, ClinicalText, OutcomeText, ObsTimestamp, ClinicalVector)
+                    VALUES (:oid, :pid, :name, :rl, :rs, :traj, :ct, :ot, :ts,
+                            TO_VECTOR(:vec, DOUBLE))
+                """), {
+                    "oid": obs_id, "pid": str(patient_id), "name": patient_name,
+                    "rl": risk_level, "rs": float(risk_score), "traj": trajectory,
+                    "ct": clinical_text[:4000], "ot": outcome_text[:2000],
+                    "ts": timestamp, "vec": _vec_to_str(vec),
+                })
+            else:
+                conn.execute(text(f"""
+                    INSERT INTO {OBS_TABLE}
+                      (ObsId, PatientId, PatientName, RiskLevel, RiskScore,
+                       Trajectory, ClinicalText, OutcomeText, ObsTimestamp)
+                    VALUES (:oid, :pid, :name, :rl, :rs, :traj, :ct, :ot, :ts)
+                """), {
+                    "oid": obs_id, "pid": str(patient_id), "name": patient_name,
+                    "rl": risk_level, "rs": float(risk_score), "traj": trajectory,
+                    "ct": clinical_text[:4000], "ot": outcome_text[:2000],
+                    "ts": timestamp,
+                })
+            conn.commit()
+        logger.info(f"[IRIS] Stored observation for patient {patient_id} (risk={risk_level})")
+        return True
+    except Exception as e:
+        logger.warning(f"[IRIS] store_observation failed: {e}")
+        return False
+
+
+def get_rag_context(clinical_text: str, exclude_patient_id: str, top_k: int = 3) -> list:
+    """
+    Vector-search IRIS for the top_k most similar historical observations,
+    excluding the current patient. Returns list of dicts for use as RAG context.
+    Falls back to empty list if IRIS unavailable or table empty.
+    """
+    if not _has_vector():
+        return []
+    try:
+        if not is_connected():
+            return []
+        if not _obs_table_exists():
+            return []
+
+        vec = _embed(clinical_text)
+        if not vec:
+            return []
+
+        with _get_engine().connect() as conn:
+            result = conn.execute(text(f"""
+                SELECT TOP {int(top_k)}
+                    PatientName, RiskLevel, RiskScore, Trajectory, OutcomeText,
+                    VECTOR_COSINE(ClinicalVector, TO_VECTOR(:vec, DOUBLE)) AS Similarity
+                FROM {OBS_TABLE}
+                WHERE PatientId <> :pid
+                  AND ClinicalVector IS NOT NULL
+                ORDER BY Similarity DESC
+            """), {"vec": _vec_to_str(vec), "pid": str(exclude_patient_id)})
+            rows = result.fetchall()
+
+        return [
+            {
+                "patient_name": r[0],
+                "risk_level": r[1],
+                "risk_score": float(r[2] or 0),
+                "trajectory": r[3],
+                "outcome": r[4] or "",
+                "similarity": float(r[5]) if r[5] is not None else 0.0,
+            }
+            for r in rows
+            if r[5] is not None and float(r[5]) > 0.5  # only meaningful matches
+        ]
+    except Exception as e:
+        logger.warning(f"[IRIS] get_rag_context failed: {e}")
+        return []

@@ -213,7 +213,7 @@ def get_iris_patient(patient_id: str):
                     "date":            (r.get("effectiveDateTime") or "")[:10] or None,
                     "is_stool_related": True,
                     "is_high_weight":  r.get("code", {}).get("coding", [{}])[0].get("code")
-                                       in {"2335-8", "35548-6", "94558-4"},
+                                       in {"2335-8", "35548-6", "72289-1"},  # Hgb-FIT, Calprotectin, MMP-9
                 })
             elif rt == "DiagnosticReport":
                 report_summaries.append({
@@ -251,6 +251,196 @@ def get_fhir_bundle(patient_id: str):
         content=bundle,
         headers={"Content-Disposition": f'attachment; filename="fhir-bundle-{patient_id}.json"'},
     )
+
+
+@router.get("/api/iris/analytics")
+def get_iris_analytics():
+    """
+    InterSystems Analytics — population-level insights powered by IRIS SQL.
+
+    All aggregations run directly against the SQLUser.GutSensePatients table
+    in IRIS (same engine as the native patient store) plus time-series data
+    from the GutSense SQLite database for 90-day biomarker trends.
+    """
+    if not iris_native.is_connected():
+        raise HTTPException(status_code=503, detail="IRIS not reachable.")
+
+    from sqlalchemy import text as _text
+    import sqlite3 as _sqlite3
+    import os as _os
+
+    engine = iris_native._get_engine()
+
+    # ── 1. KPIs from IRIS SQL ─────────────────────────────────────────────────
+    with engine.connect() as conn:
+        kpi_row = conn.execute(_text(f"""
+            SELECT
+                COUNT(*)                          AS total_patients,
+                SUM(CASE WHEN RiskLevel = 'high'   THEN 1 ELSE 0 END) AS high_risk,
+                SUM(CASE WHEN RiskLevel = 'medium' THEN 1 ELSE 0 END) AS medium_risk,
+                SUM(CASE WHEN RiskLevel = 'low'    THEN 1 ELSE 0 END) AS low_risk,
+                AVG(RiskScore)                    AS avg_score,
+                MAX(RiskScore)                    AS max_score,
+                MIN(RiskScore)                    AS min_score
+            FROM {iris_native.TABLE}
+        """)).fetchone()
+
+        dist_rows = conn.execute(_text(f"""
+            SELECT RiskLevel, COUNT(*) AS cnt, AVG(RiskScore) AS avg_score
+            FROM {iris_native.TABLE}
+            GROUP BY RiskLevel
+            ORDER BY avg_score DESC
+        """)).fetchall()
+
+        patient_rows = conn.execute(_text(f"""
+            SELECT PatientId, Name, Gender, RiskScore, RiskLevel, Recommendation
+            FROM {iris_native.TABLE}
+            ORDER BY RiskScore DESC
+        """)).fetchall()
+
+    kpi = {
+        "total_patients": int(kpi_row[0] or 0),
+        "high_risk":      int(kpi_row[1] or 0),
+        "medium_risk":    int(kpi_row[2] or 0),
+        "low_risk":       int(kpi_row[3] or 0),
+        "avg_score":      round(float(kpi_row[4] or 0), 1),
+        "max_score":      round(float(kpi_row[5] or 0), 1),
+        "min_score":      round(float(kpi_row[6] or 0), 1),
+    }
+
+    risk_distribution = [
+        {
+            "level":     row[0] or "unknown",
+            "count":     int(row[1]),
+            "avg_score": round(float(row[2] or 0), 1),
+            "pct":       round(int(row[1]) / max(kpi["total_patients"], 1) * 100, 1),
+        }
+        for row in dist_rows
+    ]
+
+    cohort = [
+        {
+            "id":             row[0],
+            "name":           row[1],
+            "gender":         row[2],
+            "risk_score":     round(float(row[3] or 0)),
+            "risk_level":     row[4] or "low",
+            "recommendation": row[5] or "",
+        }
+        for row in patient_rows
+    ]
+
+    # ── 2. Time-series from SQLite ────────────────────────────────────────────
+    here = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    db_path = _os.path.join(here, "biomarker.db")
+
+    biomarker_trends = []
+    risk_trend       = []
+    trajectory_dist  = []
+    score_breakdown  = []
+
+    if _os.path.exists(db_path):
+        con = _sqlite3.connect(db_path)
+        con.row_factory = _sqlite3.Row
+        cur = con.cursor()
+
+        # 30-day rolling average biomarkers across all patients
+        cur.execute("""
+            SELECT
+                date(timestamp)           AS day,
+                AVG(hemoglobin_fit_ng_ml) AS hgb_fit,
+                AVG(calprotectin_ug_g)    AS calprotectin,
+                AVG(mmp9_ng_ml)           AS mmp9,
+                AVG(mpo_ng_ml)            AS mpo,
+                AVG(mmp8_ng_ml)           AS mmp8,
+                AVG(fibrinogen_ng_ml)     AS fibrinogen,
+                AVG(haptoglobin_ug_g)     AS haptoglobin,
+                AVG(pgrp_s_ng_ml)         AS pgrp_s
+            FROM biomarker_readings
+            WHERE timestamp >= datetime('now', '-30 days')
+            GROUP BY day
+            ORDER BY day
+        """)
+        for r in cur.fetchall():
+            biomarker_trends.append({
+                "day":          r["day"],
+                "hgb_fit":      round(float(r["hgb_fit"] or 0), 1),
+                "calprotectin": round(float(r["calprotectin"] or 0), 1),
+                "mmp9":         round(float(r["mmp9"] or 0), 1),
+                "mpo":          round(float(r["mpo"] or 0), 1),
+                "mmp8":         round(float(r["mmp8"] or 0), 1),
+                "fibrinogen":   round(float(r["fibrinogen"] or 0), 1),
+                "haptoglobin":  round(float(r["haptoglobin"] or 0), 1),
+                "pgrp_s":       round(float(r["pgrp_s"] or 0), 1),
+            })
+
+        # Risk score trend — weekly averages
+        cur.execute("""
+            SELECT
+                strftime('%Y-W%W', timestamp) AS week,
+                AVG(adjusted_score)           AS avg_score,
+                COUNT(*)                      AS readings
+            FROM risk_assessments
+            WHERE timestamp >= datetime('now', '-90 days')
+            GROUP BY week
+            ORDER BY week
+        """)
+        for r in cur.fetchall():
+            risk_trend.append({
+                "week":      r["week"],
+                "avg_score": round(float(r["avg_score"] or 0), 1),
+                "readings":  int(r["readings"]),
+            })
+
+        # Trajectory breakdown
+        cur.execute("""
+            SELECT trajectory, COUNT(*) AS cnt
+            FROM (
+                SELECT patient_id, trajectory
+                FROM risk_assessments
+                GROUP BY patient_id
+                HAVING id = MAX(id)
+            )
+            GROUP BY trajectory
+        """)
+        for r in cur.fetchall():
+            trajectory_dist.append({"trajectory": r["trajectory"], "count": int(r["cnt"])})
+
+        # Per-patient average score breakdown (last reading)
+        cur.execute("""
+            SELECT p.name, ra.score_breakdown
+            FROM patients p
+            JOIN risk_assessments ra ON ra.patient_id = p.id
+              AND ra.id = (SELECT MAX(id) FROM risk_assessments WHERE patient_id = p.id)
+            WHERE ra.score_breakdown IS NOT NULL
+        """)
+        import json as _json
+        for r in cur.fetchall():
+            try:
+                bd = _json.loads(r["score_breakdown"])
+                score_breakdown.append({"name": r["name"], **{k: round(float(v), 1) for k, v in bd.items()}})
+            except Exception:
+                pass
+
+        con.close()
+
+    # ── 3. Portal link ────────────────────────────────────────────────────────
+    portal_url = (
+        f"http://{iris_native.IRIS_HOST}:52773"
+        "/csp/sys/%25CSP.Portal.Home.zen"
+    )
+
+    return {
+        "kpis":              kpi,
+        "risk_distribution": risk_distribution,
+        "cohort":            cohort,
+        "biomarker_trends":  biomarker_trends,
+        "risk_trend":        risk_trend,
+        "trajectory_dist":   trajectory_dist,
+        "score_breakdown":   score_breakdown,
+        "iris_portal_url":   portal_url,
+        "data_source":       f"IRIS SQL — {iris_native.IRIS_HOST}:{iris_native.IRIS_PORT}/{iris_native.IRIS_NAMESPACE}",
+    }
 
 
 @router.post("/api/iris/refresh")

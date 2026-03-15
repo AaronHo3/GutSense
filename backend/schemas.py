@@ -28,12 +28,14 @@ class PatientOut(PatientBase):
 class ReadingIngest(BaseModel):
     patient_id: int
     timestamp: Optional[datetime] = None
-    hemoglobin_ng_ml: float
-    butyrate_mmol_kg: float
+    mpo_ng_ml: float
+    haptoglobin_ug_g: float
+    fibrinogen_ng_ml: float
+    mmp9_ng_ml: float
+    hemoglobin_fit_ng_ml: float
+    mmp8_ng_ml: float
+    pgrp_s_ng_ml: float
     calprotectin_ug_g: float
-    basidio_ascomy_ratio: float
-    proteobacteria_index: float
-    methylation_score: float
     visit_number: int = 1
 
 class ReadingOut(BaseModel):
@@ -41,12 +43,14 @@ class ReadingOut(BaseModel):
     patient_id: int
     timestamp: datetime
     visit_number: int
-    hemoglobin_ng_ml: float
-    butyrate_mmol_kg: float
+    mpo_ng_ml: float
+    haptoglobin_ug_g: float
+    fibrinogen_ng_ml: float
+    mmp9_ng_ml: float
+    hemoglobin_fit_ng_ml: float
+    mmp8_ng_ml: float
+    pgrp_s_ng_ml: float
     calprotectin_ug_g: float
-    basidio_ascomy_ratio: float
-    proteobacteria_index: float
-    methylation_score: float
 
     class Config:
         from_attributes = True

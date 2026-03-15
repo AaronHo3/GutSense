@@ -114,12 +114,14 @@ def get_lifestyle(patient_id: int, db: Session = Depends(get_db)):
 # ── Demo: Simulate spike ───────────────────────────────────────────────────────
 
 SPIKE_READING = {
-    "hemoglobin_ng_ml":     185.0,
-    "butyrate_mmol_kg":     2.1,
-    "calprotectin_ug_g":    420.0,
-    "basidio_ascomy_ratio":  4.8,
-    "proteobacteria_index": 0.72,
-    "methylation_score":    0.81,
+    "mpo_ng_ml":            850.0,
+    "haptoglobin_ug_g":     310.0,
+    "fibrinogen_ng_ml":     680.0,
+    "mmp9_ng_ml":           240.0,
+    "hemoglobin_fit_ng_ml": 175.0,
+    "mmp8_ng_ml":           235.0,
+    "pgrp_s_ng_ml":         185.0,
+    "calprotectin_ug_g":    430.0,
 }
 
 
@@ -185,6 +187,78 @@ def simulate_spike(patient_id: int, db: Session = Depends(get_db)):
     }
 
 
+# ── Referral generation ────────────────────────────────────────────────────────
+
+@router.post("/api/patients/{patient_id}/referral")
+def generate_referral(patient_id: int, db: Session = Depends(get_db)):
+    """Generate a GI referral letter for the patient using Claude."""
+    patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+
+    reading = (
+        db.query(models.BiomarkerReading)
+        .filter(models.BiomarkerReading.patient_id == patient_id)
+        .order_by(models.BiomarkerReading.timestamp.desc())
+        .first()
+    )
+    assessment = (
+        db.query(models.RiskAssessment)
+        .filter(models.RiskAssessment.patient_id == patient_id)
+        .order_by(models.RiskAssessment.timestamp.desc())
+        .first()
+    )
+    if not reading or not assessment:
+        raise HTTPException(404, "No readings or assessment found")
+
+    biomarkers = {
+        "mpo_ng_ml":            reading.mpo_ng_ml,
+        "haptoglobin_ug_g":     reading.haptoglobin_ug_g,
+        "fibrinogen_ng_ml":     reading.fibrinogen_ng_ml,
+        "mmp9_ng_ml":           reading.mmp9_ng_ml,
+        "hemoglobin_fit_ng_ml": reading.hemoglobin_fit_ng_ml,
+        "mmp8_ng_ml":           reading.mmp8_ng_ml,
+        "pgrp_s_ng_ml":         reading.pgrp_s_ng_ml,
+        "calprotectin_ug_g":    reading.calprotectin_ug_g,
+    }
+
+    letter = claude_client.generate_referral(
+        patient_name=patient.name,
+        patient_age=patient.age,
+        patient_sex=patient.sex,
+        family_history=patient.family_history,
+        has_nod2_variant=getattr(patient, "has_nod2_variant", False),
+        biomarkers=biomarkers,
+        risk_score=assessment.adjusted_score,
+        risk_level=assessment.risk_level,
+        trajectory=assessment.trajectory,
+        physician_summary=assessment.physician_summary or "",
+        next_steps=assessment.next_steps or [],
+    )
+    return {"letter": letter, "risk_level": assessment.risk_level, "risk_score": round(assessment.adjusted_score, 1)}
+
+
+@router.post("/api/patients/{patient_id}/referral/send", status_code=201)
+def send_referral(patient_id: int, body: dict, db: Session = Depends(get_db)):
+    """Save the referral letter as a clinical note (simulates sending)."""
+    patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+
+    letter = body.get("letter", "")
+    if not letter:
+        raise HTTPException(400, "Letter text is required")
+
+    note = models.ClinicalNote(
+        patient_id=patient_id,
+        note_text=f"[REFERRAL SENT]\n\n{letter}",
+        is_physician_recommendation=True,
+    )
+    db.add(note)
+    db.commit()
+    return {"sent": True, "message": "Referral logged as clinical note"}
+
+
 # ── Recalculate score with current lifestyle ────────────────────────────────────
 
 @router.post("/api/patients/{patient_id}/recalculate", response_model=schemas.RiskAssessmentOut)
@@ -222,12 +296,14 @@ def recalculate_score(patient_id: int, db: Session = Depends(get_db)):
     high_fiber = (lifestyle.fiber_intake_g_day or 0) >= 25 if lifestyle else False
 
     reading_dict = {
-        "hemoglobin_ng_ml": reading.hemoglobin_ng_ml,
-        "butyrate_mmol_kg": reading.butyrate_mmol_kg,
-        "calprotectin_ug_g": reading.calprotectin_ug_g,
-        "basidio_ascomy_ratio": reading.basidio_ascomy_ratio,
-        "proteobacteria_index": reading.proteobacteria_index,
-        "methylation_score": reading.methylation_score,
+        "mpo_ng_ml":            reading.mpo_ng_ml,
+        "haptoglobin_ug_g":     reading.haptoglobin_ug_g,
+        "fibrinogen_ng_ml":     reading.fibrinogen_ng_ml,
+        "mmp9_ng_ml":           reading.mmp9_ng_ml,
+        "hemoglobin_fit_ng_ml": reading.hemoglobin_fit_ng_ml,
+        "mmp8_ng_ml":           reading.mmp8_ng_ml,
+        "pgrp_s_ng_ml":         reading.pgrp_s_ng_ml,
+        "calprotectin_ug_g":    reading.calprotectin_ug_g,
     }
 
     raw_score, adjusted_score, risk_level, confounded_by, score_breakdown = compute_risk_score(

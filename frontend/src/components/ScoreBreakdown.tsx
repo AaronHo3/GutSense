@@ -6,12 +6,14 @@ interface Props {
 }
 
 const MARKER_META: Record<string, { label: string; weight: number; color: string; unit: string }> = {
-  hemoglobin:     { label: 'Occult Blood (Hgb)',       weight: 0.25, color: '#ef4444', unit: 'ng/mL' },
-  methylation:    { label: 'DNA Methylation (SEPT9)',   weight: 0.25, color: '#3b82f6', unit: '0–1' },
-  calprotectin:   { label: 'Calprotectin (Inflam.)',    weight: 0.20, color: '#f97316', unit: 'µg/g' },
-  butyrate:       { label: 'Butyrate (Protective)',     weight: 0.15, color: '#22c55e', unit: 'mmol/kg' },
-  basidio_ascomy: { label: 'Fungal Dysbiosis',          weight: 0.10, color: '#a855f7', unit: 'ratio' },
-  proteobacteria: { label: 'Proteobacteria Index',      weight: 0.05, color: '#f59e0b', unit: '0–1' },
+  hemoglobin_fit: { label: 'Hemoglobin FIT (Occult Blood)', weight: 0.25, color: '#ef4444', unit: 'ng/mL' },
+  calprotectin:   { label: 'Calprotectin (Inflammation)',   weight: 0.20, color: '#f97316', unit: 'µg/g' },
+  mmp9:           { label: 'MMP-9 (Tissue Remodeling)',     weight: 0.15, color: '#8b5cf6', unit: 'ng/mL' },
+  mpo:            { label: 'MPO (Neutrophil Activity)',      weight: 0.15, color: '#ec4899', unit: 'ng/mL' },
+  mmp8:           { label: 'MMP-8 (Neutrophil Collagenase)',weight: 0.10, color: '#06b6d4', unit: 'ng/mL' },
+  fibrinogen:     { label: 'Fibrinogen (Fecal)',            weight: 0.08, color: '#f59e0b', unit: 'ng/mL' },
+  haptoglobin:    { label: 'Haptoglobin (Fecal)',           weight: 0.05, color: '#10b981', unit: 'µg/g' },
+  pgrp_s:         { label: 'PGRP-S (Innate Immunity)',      weight: 0.02, color: '#3b82f6', unit: 'ng/mL' },
 };
 
 function barColor(componentScore: number): string {

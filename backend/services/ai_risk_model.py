@@ -7,6 +7,16 @@ Layer 1 — Deterministic scoring (synchronous).
 
 Layer 2 — Claude narrative (async, result stored on the RiskAssessment).
   Called after the reading is persisted; updates the record with explanations.
+
+Biomarkers (8):
+  mpo_ng_ml            — Myeloperoxidase; oxidative stress / neutrophil activity
+  haptoglobin_ug_g     — Haptoglobin (fecal); acute-phase protein, binds free Hb
+  fibrinogen_ng_ml     — Fibrinogen (fecal); coagulation / inflammation marker
+  mmp9_ng_ml           — MMP-9; matrix metalloproteinase, ECM degradation in CRC
+  hemoglobin_fit_ng_ml — Haemoglobin FIT; occult blood, most validated CRC screen
+  mmp8_ng_ml           — MMP-8; neutrophil collagenase, elevated in CRC
+  pgrp_s_ng_ml         — PGRP-S; innate immunity peptidoglycan recognition protein
+  calprotectin_ug_g    — Calprotectin; gold-standard mucosal inflammation marker
 """
 
 import math
@@ -31,47 +41,65 @@ def _linear_clamp(x: float, low: float, high: float) -> float:
 
 # ── Per-biomarker component scores ────────────────────────────────────────────
 
-def _score_hemoglobin(val: float) -> float:
-    # healthy <20, concerning 20-100, alarm >100
-    return _sigmoid(val, midpoint=50.0, steepness=0.04)
+def _score_mpo(val: float) -> float:
+    # normal <100 ng/mL, alarm >500 ng/mL
+    return _sigmoid(val, midpoint=280.0, steepness=0.012)
 
 
-def _score_butyrate(val: float) -> float:
-    # INVERTED — depletion = risk; healthy >15, alarm <5
-    # Remap: high butyrate -> low score
-    inverted = max(0.0, 25.0 - val)  # 25 is rough ceiling
-    return _linear_clamp(inverted, low=0.0, high=22.0)
+def _score_haptoglobin(val: float) -> float:
+    # normal <50 µg/g, alarm >200 µg/g
+    return _sigmoid(val, midpoint=110.0, steepness=0.030)
+
+
+def _score_fibrinogen(val: float) -> float:
+    # normal <100 ng/mL, alarm >400 ng/mL
+    return _sigmoid(val, midpoint=230.0, steepness=0.012)
+
+
+def _score_mmp9(val: float) -> float:
+    # normal <30 ng/mL, alarm >150 ng/mL
+    return _sigmoid(val, midpoint=80.0, steepness=0.040)
+
+
+def _score_hemoglobin_fit(val: float) -> float:
+    # normal <10 ng/mL, alarm >100 ng/mL
+    return _sigmoid(val, midpoint=50.0, steepness=0.040)
+
+
+def _score_mmp8(val: float) -> float:
+    # normal <30 ng/mL, alarm >150 ng/mL
+    return _sigmoid(val, midpoint=80.0, steepness=0.040)
+
+
+def _score_pgrp_s(val: float) -> float:
+    # normal <20 ng/mL, alarm >100 ng/mL
+    return _sigmoid(val, midpoint=55.0, steepness=0.060)
 
 
 def _score_calprotectin(val: float) -> float:
-    # healthy <50, concerning 50-200, alarm >200
+    # normal <50 µg/g, alarm >200 µg/g
     return _sigmoid(val, midpoint=120.0, steepness=0.025)
 
 
-def _score_basidio_ascomy(val: float) -> float:
-    # healthy <1.5, concerning 1.5-3, alarm >3
-    return _sigmoid(val, midpoint=2.2, steepness=1.8)
-
-
-def _score_proteobacteria(val: float) -> float:
-    # 0-1 index; healthy <0.2, alarm >0.5
-    return _linear_clamp(val, low=0.0, high=0.8)
-
-
-def _score_methylation(val: float) -> float:
-    # 0-1; healthy <0.25, alarm >0.5
-    return _linear_clamp(val, low=0.0, high=0.9)
-
-
 # ── Weights ────────────────────────────────────────────────────────────────────
+# Total = 1.00
+# hemoglobin_fit: most validated non-invasive CRC screening marker (FIT)
+# calprotectin:   gold-standard mucosal inflammation
+# mmp9/mpo:       matrix degradation + oxidative burst strongly linked to CRC
+# mmp8:           neutrophil collagenase, elevated pre-malignant lesions
+# fibrinogen:     acute-phase elevation in CRC
+# haptoglobin:    binds free Hb; elevated in GI bleeding
+# pgrp_s:         innate immunity; less directly validated
 
 WEIGHTS = {
-    "hemoglobin":     0.25,
-    "methylation":    0.25,
+    "hemoglobin_fit": 0.25,
     "calprotectin":   0.20,
-    "butyrate":       0.15,
-    "basidio_ascomy": 0.10,
-    "proteobacteria": 0.05,
+    "mmp9":           0.15,
+    "mpo":            0.15,
+    "mmp8":           0.10,
+    "fibrinogen":     0.08,
+    "haptoglobin":    0.05,
+    "pgrp_s":         0.02,
 }
 
 
@@ -84,48 +112,58 @@ def compute_risk_score(
     recent_antibiotic_use: bool = False,
     high_fiber: bool = False,
     trend_rising: bool = False,
+    rag_scores: list = None,
 ) -> tuple[float, float, str, Optional[str], dict]:
     """
     Returns (raw_score, adjusted_score, risk_level, confounded_by, score_breakdown).
-    raw_score: weighted composite before demographic/lifestyle adjustments.
-    adjusted_score: final score used for alerts and display.
-    risk_level: 'green' | 'yellow' | 'orange' | 'red'
-    confounded_by: plain-text note if lifestyle factors may explain readings.
-    score_breakdown: dict of per-marker component scores (0-100, before weighting).
+
+    Layer 1 — sigmoid curves convert raw biomarker values to 0-100 component scores.
+    Layer 2 — small neural network (nn_risk_model) combines component scores,
+               patient features, and RAG scores (top-k similar historical patients
+               from SQLite kNN) into a final 0-100 risk score.
+
+    rag_scores: list of 0-3 floats — risk scores of the most similar historical
+                patients, retrieved via fast SQLite distance lookup in ingest.py.
+                If empty or unavailable, the NN uses a neutral default (50.0).
     """
+    from services import nn_risk_model
+
+    # Feature engineering: sigmoid curves normalise raw values to 0-100
     component_scores = {
-        "hemoglobin":     _score_hemoglobin(reading["hemoglobin_ng_ml"]),
-        "methylation":    _score_methylation(reading["methylation_score"]),
+        "hemoglobin_fit": _score_hemoglobin_fit(reading["hemoglobin_fit_ng_ml"]),
         "calprotectin":   _score_calprotectin(reading["calprotectin_ug_g"]),
-        "butyrate":       _score_butyrate(reading["butyrate_mmol_kg"]),
-        "basidio_ascomy": _score_basidio_ascomy(reading["basidio_ascomy_ratio"]),
-        "proteobacteria": _score_proteobacteria(reading["proteobacteria_index"]),
+        "mmp9":           _score_mmp9(reading["mmp9_ng_ml"]),
+        "mpo":            _score_mpo(reading["mpo_ng_ml"]),
+        "mmp8":           _score_mmp8(reading["mmp8_ng_ml"]),
+        "fibrinogen":     _score_fibrinogen(reading["fibrinogen_ng_ml"]),
+        "haptoglobin":    _score_haptoglobin(reading["haptoglobin_ug_g"]),
+        "pgrp_s":         _score_pgrp_s(reading["pgrp_s_ng_ml"]),
     }
 
+    # Weighted sum kept as raw_score for display/breakdown reference
     raw_score = sum(component_scores[k] * w for k, w in WEIGHTS.items())
+    raw_score = max(0.0, min(100.0, raw_score))
 
-    # Demographic modifiers
-    adjusted = raw_score
-    if patient_age > 50:
-        adjusted += 10
-    if patient_family_history:
-        adjusted += 5
-    if trend_rising:
-        adjusted += 5
+    # NN produces the actual adjusted score, incorporating RAG context
+    adjusted = nn_risk_model.predict(
+        component_scores=component_scores,
+        patient_age=patient_age,
+        family_history=patient_family_history,
+        rag_scores=rag_scores or [],
+    )
 
-    # Lifestyle modifiers
+    # Lifestyle adjustments applied after NN (interpretable overrides)
     confounded_by = None
     if recent_antibiotic_use:
-        adjusted -= 10
+        adjusted = max(0.0, adjusted - 10)
         confounded_by = (
-            "Recent antibiotic use may be causing transient dysbiosis — "
-            "microbiome markers may not reflect underlying disease state."
+            "Recent antibiotic use may be causing transient mucosal disruption — "
+            "inflammatory markers may not reflect underlying disease state."
         )
     if high_fiber:
-        adjusted -= 3
+        adjusted = max(0.0, adjusted - 3)
 
     adjusted = max(0.0, min(100.0, adjusted))
-    raw_score = max(0.0, min(100.0, raw_score))
 
     if adjusted <= 30:
         risk_level = "green"

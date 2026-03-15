@@ -60,6 +60,12 @@ export const api = {
   recalculateScore: (patientId: number) =>
     client.post<RiskAssessment>(`/api/patients/${patientId}/recalculate`).then(r => r.data),
 
+  // Referral generation
+  generateReferral: (patientId: number) =>
+    client.post<{ letter: string; risk_level: string; risk_score: number }>(`/api/patients/${patientId}/referral`, null, { timeout: 60000 }).then(r => r.data),
+  sendReferral: (patientId: number, letter: string) =>
+    client.post<{ sent: boolean; message: string }>(`/api/patients/${patientId}/referral/send`, { letter }).then(r => r.data),
+
   // IRIS FHIR
   getIrisStatus: () =>
     client.get<IrisStatus>('/api/iris/status').then(r => r.data),

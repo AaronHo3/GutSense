@@ -3,19 +3,21 @@ FHIR R4 resource generator.
 
 Converts GutSense SQLite patient data into standards-compliant FHIR R4 resources:
   Patient          → hl7.org/fhir/R4/patient.html
-  Observation ×6   → one per biomarker (LOINC-coded)
-  DiagnosticReport → wraps the 6 observations into a stool panel report
+  Observation ×8   → one per biomarker (LOINC-coded)
+  DiagnosticReport → wraps the 8 observations into a stool panel report
   RiskAssessment   → FHIR RiskAssessment (risk score + level)
 
 All resources are returned as a FHIR Bundle (type=collection).
 
 LOINC codes used:
-  2335-8   Hemoglobin [Mass/volume] in Stool
+  2335-8   Hemoglobin [Mass/volume] in Stool (FIT)
   35548-6  Calprotectin [Mass/volume] in Stool
-  2762-3   Fatty acids (butyrate) [Mass/volume] in Stool
-  94558-4  DNA methylation biomarker (SEPT9/SDC2 panel)
-  89252-8  Microbiome composition ratio
-  57798-7  Proteobacteria relative abundance
+  72289-1  MMP-9 [Mass/volume] in Serum or Plasma
+  35341-6  Myeloperoxidase (MPO) [Mass/volume]
+  72291-7  MMP-8 [Mass/volume] in Serum or Plasma
+  3255-7   Fibrinogen [Mass/volume] in Platelet poor plasma
+  4542-7   Haptoglobin [Mass/volume] in Serum
+  LP436285-3  PGRP-S (Peptidoglycan Recognition Protein S)
 """
 
 import sqlite3
@@ -30,35 +32,44 @@ from typing import Optional
 # Interpretation thresholds (mirrors ai_risk_model.py logic)
 # ---------------------------------------------------------------------------
 
-def _hemoglobin_interp(val: float) -> Optional[str]:
+def _mpo_interp(val: float) -> Optional[str]:
+    if val > 500:  return "HH"
+    if val > 300:  return "H"
+    return None
+
+def _haptoglobin_interp(val: float) -> Optional[str]:
     if val > 200:  return "HH"
-    if val > 100:  return "H"
+    if val > 120:  return "H"
+    return None
+
+def _fibrinogen_interp(val: float) -> Optional[str]:
+    if val > 400:  return "HH"
+    if val > 250:  return "H"
+    return None
+
+def _mmp9_interp(val: float) -> Optional[str]:
+    if val > 150:  return "HH"
+    if val > 80:   return "H"
+    return None
+
+def _hemoglobin_fit_interp(val: float) -> Optional[str]:
+    if val > 100:  return "HH"
+    if val > 50:   return "H"
+    return None
+
+def _mmp8_interp(val: float) -> Optional[str]:
+    if val > 150:  return "HH"
+    if val > 80:   return "H"
+    return None
+
+def _pgrp_s_interp(val: float) -> Optional[str]:
+    if val > 100:  return "HH"
+    if val > 55:   return "H"
     return None
 
 def _calprotectin_interp(val: float) -> Optional[str]:
     if val > 300:  return "HH"
     if val > 150:  return "H"
-    return None
-
-def _butyrate_interp(val: float) -> Optional[str]:
-    # Low butyrate = bad
-    if val < 0.5:  return "LL"
-    if val < 1.5:  return "L"
-    return None
-
-def _methylation_interp(val: float) -> Optional[str]:
-    if val > 0.8:  return "HH"
-    if val > 0.6:  return "H"
-    return None
-
-def _proteobacteria_interp(val: float) -> Optional[str]:
-    if val > 0.7:  return "HH"
-    if val > 0.5:  return "H"
-    return None
-
-def _fungal_interp(val: float) -> Optional[str]:
-    if val > 3.0:  return "HH"
-    if val > 2.5:  return "H"
     return None
 
 
@@ -152,7 +163,6 @@ def _fhir_diagnostic_report(
     obs_refs: list[str],
     risk_level: str,
 ) -> dict:
-    status_map = {"green": "final", "yellow": "final", "orange": "final", "red": "final"}
     conclusion_map = {
         "green":  "Stool biomarker panel within normal limits. No significant findings.",
         "yellow": "Mildly abnormal stool biomarker findings. Clinical correlation recommended.",
@@ -162,7 +172,7 @@ def _fhir_diagnostic_report(
     return {
         "resourceType": "DiagnosticReport",
         "id": str(uuid.uuid4()),
-        "status": status_map.get(risk_level, "final"),
+        "status": "final",
         "category": [
             {
                 "coding": [
@@ -182,7 +192,7 @@ def _fhir_diagnostic_report(
                     "display": "GI pathogens panel",
                 }
             ],
-            "text": "GutSense Stool Biomarker Panel",
+            "text": "GutSense Stool Biomarker Panel (8-marker)",
         },
         "subject": {"reference": patient_ref},
         "effectiveDateTime": reading["timestamp"] if reading["timestamp"] else datetime.now(timezone.utc).isoformat(),
@@ -228,7 +238,7 @@ def _fhir_risk_assessment(
                     ]
                 },
                 "probabilityDecimal": probability,
-                "relativeRisk": round(adjusted_score / 20, 2),  # vs baseline 20
+                "relativeRisk": round(adjusted_score / 20, 2),
                 "whenPeriod": {"start": datetime.now(timezone.utc).isoformat()},
                 "rationale": f"GutSense composite biomarker risk score {adjusted_score:.1f}/100. Trajectory: {trajectory}.",
             }
@@ -277,20 +287,24 @@ def generate_fhir_bundle(patient_id: int) -> Optional[dict]:
     patient_resource = _fhir_patient(p)
     patient_ref = f"Patient/{patient_resource['id']}"
 
-    # 6 Observation resources
+    # 8 Observation resources
     observations = [
-        _fhir_observation(patient_ref, br, "2335-8",  "Hemoglobin in Stool",
-                          br["hemoglobin_ng_ml"],      "ng/mL", "ng/mL",  _hemoglobin_interp),
-        _fhir_observation(patient_ref, br, "35548-6", "Calprotectin in Stool",
-                          br["calprotectin_ug_g"],     "ug/g",  "ug/g",   _calprotectin_interp),
-        _fhir_observation(patient_ref, br, "2762-3",  "Short-chain fatty acids (Butyrate)",
-                          br["butyrate_mmol_kg"],      "mmol/kg","mmol/kg",_butyrate_interp),
-        _fhir_observation(patient_ref, br, "94558-4", "SEPT9/SDC2 DNA Methylation Score",
-                          br["methylation_score"],     "{score}","1",      _methylation_interp),
-        _fhir_observation(patient_ref, br, "57798-7", "Proteobacteria Relative Abundance",
-                          br["proteobacteria_index"],  "{ratio}","1",      _proteobacteria_interp),
-        _fhir_observation(patient_ref, br, "89252-8", "Fungal Dysbiosis Ratio (Basidio/Ascomy)",
-                          br["basidio_ascomy_ratio"],  "{ratio}","1",      _fungal_interp),
+        _fhir_observation(patient_ref, br, "2335-8",     "Hemoglobin (FIT) in Stool",
+                          br["hemoglobin_fit_ng_ml"],  "ng/mL", "ng/mL", _hemoglobin_fit_interp),
+        _fhir_observation(patient_ref, br, "35548-6",    "Calprotectin in Stool",
+                          br["calprotectin_ug_g"],     "ug/g",  "ug/g",  _calprotectin_interp),
+        _fhir_observation(patient_ref, br, "72289-1",    "MMP-9 (Matrix Metalloproteinase-9)",
+                          br["mmp9_ng_ml"],            "ng/mL", "ng/mL", _mmp9_interp),
+        _fhir_observation(patient_ref, br, "35341-6",    "MPO (Myeloperoxidase)",
+                          br["mpo_ng_ml"],             "ng/mL", "ng/mL", _mpo_interp),
+        _fhir_observation(patient_ref, br, "72291-7",    "MMP-8 (Neutrophil Collagenase)",
+                          br["mmp8_ng_ml"],            "ng/mL", "ng/mL", _mmp8_interp),
+        _fhir_observation(patient_ref, br, "3255-7",     "Fibrinogen (Fecal)",
+                          br["fibrinogen_ng_ml"],      "ng/mL", "ng/mL", _fibrinogen_interp),
+        _fhir_observation(patient_ref, br, "4542-7",     "Haptoglobin (Fecal)",
+                          br["haptoglobin_ug_g"],      "ug/g",  "ug/g",  _haptoglobin_interp),
+        _fhir_observation(patient_ref, br, "LP436285-3", "PGRP-S (Peptidoglycan Recognition Protein S)",
+                          br["pgrp_s_ng_ml"],          "ng/mL", "ng/mL", _pgrp_s_interp),
     ]
 
     diag_report = _fhir_diagnostic_report(

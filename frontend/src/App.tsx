@@ -4,7 +4,8 @@ import { PatientDashboard } from './pages/PatientDashboard';
 import { PhysicianPortal } from './pages/PhysicianPortal';
 import { PatientDetail } from './pages/PatientDetail';
 import { IrisDashboard } from './pages/IrisDashboard';
-import { Activity, Stethoscope, Database } from 'lucide-react';
+import { AnalyticsDashboard } from './pages/AnalyticsDashboard';
+import { Activity, Stethoscope, Database, BarChart2 } from 'lucide-react';
 
 function Nav() {
   return (
@@ -56,6 +57,19 @@ function Nav() {
           <Database className="w-3.5 h-3.5" />
           IRIS
         </NavLink>
+        <NavLink
+          to="/analytics"
+          className={({ isActive }) =>
+            `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              isActive
+                ? 'bg-white/15 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`
+          }
+        >
+          <BarChart2 className="w-3.5 h-3.5" />
+          Analytics
+        </NavLink>
       </div>
     </nav>
   );
@@ -72,6 +86,7 @@ function App() {
           <Route path="/physician" element={<PhysicianPortal />} />
           <Route path="/physician/patient/:patientId" element={<PatientDetail />} />
           <Route path="/iris" element={<IrisDashboard />} />
+          <Route path="/analytics" element={<AnalyticsDashboard />} />
         </Routes>
       </div>
     </BrowserRouter>

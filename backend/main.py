@@ -130,12 +130,14 @@ def _fill_narratives():
                 patient_sex=patient.sex,
                 family_history=patient.family_history,
                 biomarkers={
-                    "hemoglobin_ng_ml":     reading.hemoglobin_ng_ml,
-                    "butyrate_mmol_kg":     reading.butyrate_mmol_kg,
+                    "mpo_ng_ml":            reading.mpo_ng_ml,
+                    "haptoglobin_ug_g":     reading.haptoglobin_ug_g,
+                    "fibrinogen_ng_ml":     reading.fibrinogen_ng_ml,
+                    "mmp9_ng_ml":           reading.mmp9_ng_ml,
+                    "hemoglobin_fit_ng_ml": reading.hemoglobin_fit_ng_ml,
+                    "mmp8_ng_ml":           reading.mmp8_ng_ml,
+                    "pgrp_s_ng_ml":         reading.pgrp_s_ng_ml,
                     "calprotectin_ug_g":    reading.calprotectin_ug_g,
-                    "basidio_ascomy_ratio":  reading.basidio_ascomy_ratio,
-                    "proteobacteria_index": reading.proteobacteria_index,
-                    "methylation_score":    reading.methylation_score,
                 },
                 risk_score=assessment.adjusted_score,
                 risk_level=assessment.risk_level,
@@ -154,9 +156,26 @@ def _fill_narratives():
         db.close()
 
 
+def _run_live_simulator():
+    """Start the live sensor simulator after a short delay to ensure the server is ready."""
+    import time
+    time.sleep(3)
+    from simulator.sensor_simulator import run_live
+    run_live()
+
+
+def _startup_tasks(name_to_id: dict[str, int]):
+    """Run backfill then start the live simulator."""
+    _run_backfill(name_to_id)
+    threading.Thread(target=_run_live_simulator, daemon=True).start()
+
+
 @app.on_event("startup")
 def startup():
     init_db()
+    # Train (or load cached) NN risk model before serving any requests
+    from services import nn_risk_model
+    nn_risk_model.ensure_trained()
     name_to_id = _seed_patients()
-    # Run backfill in a background thread so the server starts immediately
-    threading.Thread(target=_run_backfill, args=(name_to_id,), daemon=True).start()
+    # Run backfill + live simulator in a background thread so the server starts immediately
+    threading.Thread(target=_startup_tasks, args=(name_to_id,), daemon=True).start()

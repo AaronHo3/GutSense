@@ -13,12 +13,14 @@ export interface BiomarkerReading {
   patient_id: number;
   timestamp: string;
   visit_number: number;
-  hemoglobin_ng_ml: number;
-  butyrate_mmol_kg: number;
+  mpo_ng_ml: number;
+  haptoglobin_ug_g: number;
+  fibrinogen_ng_ml: number;
+  mmp9_ng_ml: number;
+  hemoglobin_fit_ng_ml: number;
+  mmp8_ng_ml: number;
+  pgrp_s_ng_ml: number;
   calprotectin_ug_g: number;
-  basidio_ascomy_ratio: number;
-  proteobacteria_index: number;
-  methylation_score: number;
 }
 
 export interface RiskAssessment {

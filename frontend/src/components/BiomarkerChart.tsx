@@ -18,21 +18,12 @@ interface MarkerConfig {
 
 export const MARKERS: MarkerConfig[] = [
   {
-    key: 'hemoglobin_ng_ml',
-    label: 'Occult Blood (Hemoglobin)',
+    key: 'hemoglobin_fit_ng_ml',
+    label: 'Hemoglobin FIT (Occult Blood)',
     unit: 'ng/mL',
-    normalMax: 20,
+    normalMax: 10,
     alarmAt: 100,
     color: '#ef4444',
-  },
-  {
-    key: 'butyrate_mmol_kg',
-    label: 'Butyrate (Protective SCFA)',
-    unit: 'mmol/kg',
-    normalMax: 15,
-    alarmAt: 5,
-    color: '#22c55e',
-    inverted: true,
   },
   {
     key: 'calprotectin_ug_g',
@@ -43,31 +34,52 @@ export const MARKERS: MarkerConfig[] = [
     color: '#f97316',
   },
   {
-    key: 'basidio_ascomy_ratio',
-    label: 'Fungal Dysbiosis Index',
-    unit: 'ratio',
-    normalMax: 1.5,
-    alarmAt: 3.0,
-    color: '#a855f7',
-    decimals: 2,
+    key: 'mmp9_ng_ml',
+    label: 'MMP-9 (Matrix Metalloproteinase-9)',
+    unit: 'ng/mL',
+    normalMax: 30,
+    alarmAt: 150,
+    color: '#8b5cf6',
   },
   {
-    key: 'proteobacteria_index',
-    label: 'Proteobacteria Index',
-    unit: '0–1',
-    normalMax: 0.2,
-    alarmAt: 0.5,
+    key: 'mpo_ng_ml',
+    label: 'MPO (Myeloperoxidase)',
+    unit: 'ng/mL',
+    normalMax: 100,
+    alarmAt: 500,
+    color: '#ec4899',
+  },
+  {
+    key: 'mmp8_ng_ml',
+    label: 'MMP-8 (Neutrophil Collagenase)',
+    unit: 'ng/mL',
+    normalMax: 30,
+    alarmAt: 150,
+    color: '#06b6d4',
+  },
+  {
+    key: 'fibrinogen_ng_ml',
+    label: 'Fibrinogen (Fecal)',
+    unit: 'ng/mL',
+    normalMax: 100,
+    alarmAt: 400,
     color: '#f59e0b',
-    decimals: 3,
   },
   {
-    key: 'methylation_score',
-    label: 'DNA Methylation (SEPT9/SDC2)',
-    unit: '0–1',
-    normalMax: 0.25,
-    alarmAt: 0.5,
+    key: 'haptoglobin_ug_g',
+    label: 'Haptoglobin (Fecal)',
+    unit: 'µg/g',
+    normalMax: 50,
+    alarmAt: 200,
+    color: '#10b981',
+  },
+  {
+    key: 'pgrp_s_ng_ml',
+    label: 'PGRP-S (Innate Immunity)',
+    unit: 'ng/mL',
+    normalMax: 20,
+    alarmAt: 100,
     color: '#3b82f6',
-    decimals: 3,
   },
 ];
 
@@ -81,21 +93,6 @@ interface DataPoint {
   value: number;
 }
 
-// Custom dot: only render for alarm-level readings
-function AlarmDot(props: { cx?: number; cy?: number; payload?: DataPoint; marker: MarkerConfig }) {
-  const { cx, cy, payload, marker } = props;
-  if (!payload || cx === undefined || cy === undefined) return null;
-  const isAlarm = marker.inverted
-    ? payload.value < marker.alarmAt
-    : payload.value > marker.alarmAt;
-  if (!isAlarm) return null;
-  return (
-    <circle
-      cx={cx} cy={cy} r={4}
-      fill="#ef4444" stroke="white" strokeWidth={1.5}
-    />
-  );
-}
 
 export function BiomarkerChart({ readings, marker }: Props) {
   const data: DataPoint[] = readings.map(r => ({
@@ -160,7 +157,7 @@ export function BiomarkerChart({ readings, marker }: Props) {
             tickLine={false}
             interval="preserveStartEnd"
           />
-          <YAxis tick={{ fontSize: 9, fill: '#64748b' }} tickLine={false} />
+          <YAxis tick={{ fontSize: 9, fill: '#64748b' }} tickLine={false} domain={[0, 'auto']} />
           <Tooltip
             contentStyle={{ fontSize: 12, borderRadius: 8, background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
             formatter={(v) => [`${Number(v).toFixed(marker.decimals ?? 1)} ${marker.unit}`, marker.label]}
@@ -169,15 +166,8 @@ export function BiomarkerChart({ readings, marker }: Props) {
             y={marker.normalMax}
             stroke="#34d399"
             strokeDasharray="4 2"
-            strokeOpacity={0.5}
-            label={{ value: 'Normal', position: 'insideTopRight', fontSize: 8, fill: '#34d399' }}
-          />
-          <ReferenceLine
-            y={marker.alarmAt}
-            stroke="#f87171"
-            strokeDasharray="4 2"
-            strokeOpacity={0.5}
-            label={{ value: 'Alarm', position: 'insideTopRight', fontSize: 8, fill: '#f87171' }}
+            strokeOpacity={0.6}
+            label={{ value: `Normal ≤${marker.normalMax}`, position: 'insideTopRight', fontSize: 8, fill: '#34d399' }}
           />
           <Area
             type="monotone"
@@ -185,7 +175,7 @@ export function BiomarkerChart({ readings, marker }: Props) {
             stroke={marker.color}
             strokeWidth={2}
             fill={`url(#${gradientId})`}
-            dot={(props) => <AlarmDot {...props} marker={marker} />}
+            dot={false}
             activeDot={{ r: 4, fill: marker.color }}
           />
         </AreaChart>

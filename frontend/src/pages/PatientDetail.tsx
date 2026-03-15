@@ -1,15 +1,22 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Zap, Clock, CalendarDays, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Zap, Clock, CalendarDays, TrendingUp, TrendingDown, Minus, FileText } from 'lucide-react';
+
+const TRAJECTORY_META: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+  'Rapidly Increasing': { icon: <TrendingUp className="w-3 h-3" />, color: '#f87171', label: 'Rising fast' },
+  'Slowly Increasing':  { icon: <TrendingUp className="w-3 h-3" />, color: '#fbbf24', label: 'Trending up' },
+  'Stable':             { icon: <Minus className="w-3 h-3" />,       color: '#94a3b8', label: 'No change' },
+  'Improving':          { icon: <TrendingDown className="w-3 h-3" />, color: '#34d399', label: 'Improving' },
+};
 import { usePatientData } from '../hooks/usePatientData';
 import { useAlerts } from '../hooks/useAlerts';
 import { RiskScore } from '../components/RiskScore';
-import { ScoreBreakdown } from '../components/ScoreBreakdown';
 import { BiomarkerChart, MARKERS } from '../components/BiomarkerChart';
 import { AlertBanner } from '../components/AlertBanner';
 import { ClinicalNotes } from '../components/ClinicalNotes';
 import { ReportPanel } from '../components/ReportPanel';
+import { ReferralModal } from '../components/ReferralModal';
 import { api } from '../api/endpoints';
 import type { Patient, ClinicalNote } from '../types';
 
@@ -23,6 +30,7 @@ export function PatientDetail() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [notes, setNotes] = useState<ClinicalNote[]>([]);
   const [spiking, setSpiking] = useState(false);
+  const [showReferral, setShowReferral] = useState(false);
 
   const loadNotes = () => api.getNotes(id).then(setNotes).catch(() => {});
 
@@ -86,14 +94,24 @@ export function PatientDetail() {
             {patient?.has_nod2_variant && ' · NOD2 variant'}
           </p>
         </div>
-        <button
-          onClick={handleSpike}
-          disabled={spiking}
-          className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs rounded-lg transition disabled:opacity-50 flex-shrink-0"
-        >
-          <Zap className="w-3.5 h-3.5" />
-          {spiking ? 'Simulating...' : 'Simulate Spike'}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setShowReferral(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-white text-xs rounded-lg transition"
+            style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Referral
+          </button>
+          <button
+            onClick={handleSpike}
+            disabled={spiking}
+            className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs rounded-lg transition disabled:opacity-50"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            {spiking ? 'Simulating...' : 'Simulate Spike'}
+          </button>
+        </div>
       </div>
 
       {/* Stats strip */}
@@ -106,10 +124,14 @@ export function PatientDetail() {
             <div className="text-xs text-slate-500 mt-0.5">Risk Score</div>
           </div>
           <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="text-sm font-semibold text-white truncate">{latestRisk.trajectory}</div>
-            <div className="text-xs text-slate-500 mt-0.5 flex items-center justify-center gap-1">
-              <TrendingUp className="w-3 h-3" />7-Day Trend
-            </div>
+            {(() => { const t = TRAJECTORY_META[latestRisk.trajectory] ?? TRAJECTORY_META['Stable']; return (
+              <>
+                <div className="text-sm font-semibold flex items-center justify-center gap-1 truncate" style={{ color: t.color }}>
+                  {t.icon}{latestRisk.trajectory}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">{t.label}</div>
+              </>
+            ); })()}
           </div>
           <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="text-xs font-semibold text-white truncate">{lastReadingTime}</div>
@@ -141,7 +163,6 @@ export function PatientDetail() {
           </div>
           <div className="flex-1 space-y-3">
             <ReportPanel risk={latestRisk} mode="physician" />
-            <ScoreBreakdown risk={latestRisk} />
           </div>
         </div>
       )}
@@ -160,6 +181,16 @@ export function PatientDetail() {
 
       {/* Clinical notes */}
       <ClinicalNotes notes={notes} onAdd={handleAddNote} allowAdd />
+
+      {/* Referral modal */}
+      {showReferral && patient && (
+        <ReferralModal
+          patientId={id}
+          patientName={patient.name}
+          onClose={() => setShowReferral(false)}
+          onSent={loadNotes}
+        />
+      )}
     </div>
   );
 }
