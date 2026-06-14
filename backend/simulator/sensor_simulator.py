@@ -23,7 +23,7 @@ from simulator.patient_profiles import DEMO_PATIENTS
 API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 INGEST_URL = f"{API_BASE}/api/ingest"
 INGEST_URL_SKIP = f"{API_BASE}/api/ingest?skip_narrative=true"
-INTERVAL_SECONDS = int(os.getenv("SIMULATOR_INTERVAL_SECONDS", "30"))
+INTERVAL_SECONDS = int(os.getenv("SIMULATOR_INTERVAL_SECONDS", "300"))
 
 
 def _post_reading(payload: dict, skip_narrative: bool = False) -> bool:

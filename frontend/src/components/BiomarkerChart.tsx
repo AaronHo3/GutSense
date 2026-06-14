@@ -17,70 +17,14 @@ interface MarkerConfig {
 }
 
 export const MARKERS: MarkerConfig[] = [
-  {
-    key: 'hemoglobin_fit_ng_ml',
-    label: 'Hemoglobin FIT (Occult Blood)',
-    unit: 'ng/mL',
-    normalMax: 10,
-    alarmAt: 100,
-    color: '#ef4444',
-  },
-  {
-    key: 'calprotectin_ug_g',
-    label: 'Calprotectin (Inflammation)',
-    unit: 'µg/g',
-    normalMax: 50,
-    alarmAt: 200,
-    color: '#f97316',
-  },
-  {
-    key: 'mmp9_ng_ml',
-    label: 'MMP-9 (Matrix Metalloproteinase-9)',
-    unit: 'ng/mL',
-    normalMax: 30,
-    alarmAt: 150,
-    color: '#8b5cf6',
-  },
-  {
-    key: 'mpo_ng_ml',
-    label: 'MPO (Myeloperoxidase)',
-    unit: 'ng/mL',
-    normalMax: 100,
-    alarmAt: 500,
-    color: '#ec4899',
-  },
-  {
-    key: 'mmp8_ng_ml',
-    label: 'MMP-8 (Neutrophil Collagenase)',
-    unit: 'ng/mL',
-    normalMax: 30,
-    alarmAt: 150,
-    color: '#06b6d4',
-  },
-  {
-    key: 'fibrinogen_ng_ml',
-    label: 'Fibrinogen (Fecal)',
-    unit: 'ng/mL',
-    normalMax: 100,
-    alarmAt: 400,
-    color: '#f59e0b',
-  },
-  {
-    key: 'haptoglobin_ug_g',
-    label: 'Haptoglobin (Fecal)',
-    unit: 'µg/g',
-    normalMax: 50,
-    alarmAt: 200,
-    color: '#10b981',
-  },
-  {
-    key: 'pgrp_s_ng_ml',
-    label: 'PGRP-S (Innate Immunity)',
-    unit: 'ng/mL',
-    normalMax: 20,
-    alarmAt: 100,
-    color: '#3b82f6',
-  },
+  { key: 'hemoglobin_fit_ng_ml', label: 'Hemoglobin FIT', unit: 'ng/mL', normalMax: 10, alarmAt: 100, color: '#1B1A17' },
+  { key: 'calprotectin_ug_g', label: 'Calprotectin', unit: 'µg/g', normalMax: 50, alarmAt: 200, color: '#1B1A17' },
+  { key: 'mmp9_ng_ml', label: 'MMP-9', unit: 'ng/mL', normalMax: 30, alarmAt: 150, color: '#1B1A17' },
+  { key: 'mpo_ng_ml', label: 'MPO', unit: 'ng/mL', normalMax: 100, alarmAt: 500, color: '#1B1A17' },
+  { key: 'mmp8_ng_ml', label: 'MMP-8', unit: 'ng/mL', normalMax: 30, alarmAt: 150, color: '#1B1A17' },
+  { key: 'fibrinogen_ng_ml', label: 'Fibrinogen', unit: 'ng/mL', normalMax: 100, alarmAt: 400, color: '#1B1A17' },
+  { key: 'haptoglobin_ug_g', label: 'Haptoglobin', unit: 'µg/g', normalMax: 50, alarmAt: 200, color: '#1B1A17' },
+  { key: 'pgrp_s_ng_ml', label: 'PGRP-S', unit: 'ng/mL', normalMax: 20, alarmAt: 100, color: '#1B1A17' },
 ];
 
 interface Props {
@@ -93,6 +37,15 @@ interface DataPoint {
   value: number;
 }
 
+const INK = '#1B1A17';
+const LINE = '#E4DFD3';
+const FAINT = '#8C8779';
+
+const STATUS = {
+  alarm:      { color: '#9E2B25', label: 'Alarm' },
+  concerning: { color: '#9A7A24', label: 'Elevated' },
+  normal:     { color: '#2F6B4F', label: 'Normal' },
+};
 
 export function BiomarkerChart({ readings, marker }: Props) {
   const data: DataPoint[] = readings.map(r => ({
@@ -101,82 +54,76 @@ export function BiomarkerChart({ readings, marker }: Props) {
   }));
 
   const latestVal = data.length > 0 ? data[data.length - 1].value : null;
-  const isAlarm = latestVal !== null && (
-    marker.inverted ? latestVal < marker.alarmAt : latestVal > marker.alarmAt
-  );
-  const isConcerning = !isAlarm && latestVal !== null && (
-    marker.inverted ? latestVal < marker.normalMax : latestVal > marker.normalMax
-  );
-
-  const statusColor = isAlarm ? 'text-red-400' : isConcerning ? 'text-yellow-400' : 'text-emerald-400';
-  const statusLabel = isAlarm ? 'Alarm' : isConcerning ? 'Elevated' : 'Normal';
-  const statusBg = isAlarm ? 'bg-red-500/15' : isConcerning ? 'bg-yellow-500/15' : 'bg-emerald-500/15';
+  const isAlarm = latestVal !== null && (marker.inverted ? latestVal < marker.alarmAt : latestVal > marker.alarmAt);
+  const isConcerning = !isAlarm && latestVal !== null && (marker.inverted ? latestVal < marker.normalMax : latestVal > marker.normalMax);
+  const status = isAlarm ? STATUS.alarm : isConcerning ? STATUS.concerning : STATUS.normal;
 
   const gradientId = `grad-${String(marker.key)}`;
 
   return (
-    <div
-      className="rounded-2xl overflow-hidden border-l-4"
-      style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.08)`, borderLeftColor: marker.color }}
-    >
-      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{ background: marker.color }}
-          />
-          <div>
-            <h3 className="text-xs font-semibold text-slate-200 leading-tight">{marker.label}</h3>
-            <p className="text-xs text-slate-500">{marker.unit}</p>
-          </div>
+    <div className="card px-5 pt-4 pb-3">
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="font-serif text-ink leading-tight" style={{ fontSize: '1.0625rem', fontWeight: 440 }}>
+            {marker.label}
+          </h3>
+          <p className="eyebrow mt-1">{marker.unit}</p>
         </div>
         {latestVal !== null && (
           <div className="text-right">
-            <div className="text-lg font-bold tabular-nums" style={{ color: marker.color }}>
+            <div className="font-mono tnum text-ink" style={{ fontSize: '1.25rem', fontWeight: 500, lineHeight: 1 }}>
               {latestVal.toFixed(marker.decimals ?? 1)}
             </div>
-            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${statusBg} ${statusColor}`}>
-              {statusLabel}
+            <span className="font-mono uppercase" style={{ fontSize: '0.625rem', letterSpacing: '0.1em', color: status.color }}>
+              {status.label}
             </span>
           </div>
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={150}>
-        <AreaChart data={data} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={132}>
+        <AreaChart data={data} margin={{ top: 4, right: 6, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={marker.color} stopOpacity={0.15} />
-              <stop offset="95%" stopColor={marker.color} stopOpacity={0} />
+              <stop offset="0%" stopColor={INK} stopOpacity={0.08} />
+              <stop offset="100%" stopColor={INK} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+          <CartesianGrid stroke={LINE} vertical={false} />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 9, fill: '#64748b' }}
+            tick={{ fontSize: 9, fill: FAINT, fontFamily: 'Spline Sans Mono' }}
             tickLine={false}
+            axisLine={{ stroke: LINE }}
             interval="preserveStartEnd"
+            minTickGap={40}
           />
-          <YAxis tick={{ fontSize: 9, fill: '#64748b' }} tickLine={false} domain={[0, 'auto']} />
+          <YAxis
+            tick={{ fontSize: 9, fill: FAINT, fontFamily: 'Spline Sans Mono' }}
+            tickLine={false}
+            axisLine={false}
+            domain={[0, 'auto']}
+            width={34}
+          />
           <Tooltip
-            contentStyle={{ fontSize: 12, borderRadius: 8, background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+            contentStyle={{ fontSize: 12, borderRadius: 4, background: '#FCFBF8', border: '1px solid #D2CCBD', color: '#1B1A17', fontFamily: 'Spline Sans Mono' }}
+            labelStyle={{ color: '#8C8779' }}
             formatter={(v) => [`${Number(v).toFixed(marker.decimals ?? 1)} ${marker.unit}`, marker.label]}
           />
           <ReferenceLine
             y={marker.normalMax}
-            stroke="#34d399"
-            strokeDasharray="4 2"
-            strokeOpacity={0.6}
-            label={{ value: `Normal ≤${marker.normalMax}`, position: 'insideTopRight', fontSize: 8, fill: '#34d399' }}
+            stroke={FAINT}
+            strokeDasharray="3 3"
+            label={{ value: `normal ≤${marker.normalMax}`, position: 'insideTopRight', fontSize: 8, fill: FAINT, fontFamily: 'Spline Sans Mono' }}
           />
           <Area
             type="monotone"
             dataKey="value"
-            stroke={marker.color}
-            strokeWidth={2}
+            stroke={INK}
+            strokeWidth={1.5}
             fill={`url(#${gradientId})`}
             dot={false}
-            activeDot={{ r: 4, fill: marker.color }}
+            activeDot={{ r: 3, fill: INK }}
           />
         </AreaChart>
       </ResponsiveContainer>

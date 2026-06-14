@@ -1,5 +1,5 @@
 
-import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { Alert } from '../types';
 
 interface Props {
@@ -7,16 +7,15 @@ interface Props {
   onAcknowledge: (id: number) => void;
 }
 
-const SEVERITY_CONFIG = {
-  info:     { icon: Info,          bg: 'bg-blue-500/10',   border: 'border-blue-500/20 border-l-blue-500',  text: 'text-blue-300',  label: 'Info' },
-  warning:  { icon: AlertTriangle, bg: 'bg-yellow-500/10', border: 'border-yellow-500/20 border-l-yellow-500', text: 'text-yellow-300', label: 'Warning' },
-  critical: { icon: AlertCircle,   bg: 'bg-red-500/10',    border: 'border-red-500/20 border-l-red-500',   text: 'text-red-300',   label: 'Critical Alert' },
+const SEVERITY: Record<string, { color: string; tint: string; label: string }> = {
+  info:     { color: '#56524A', tint: 'rgba(86,82,74,0.05)',  label: 'Notice' },
+  warning:  { color: '#9A7A24', tint: 'rgba(154,122,36,0.07)', label: 'Warning' },
+  critical: { color: '#9E2B25', tint: 'rgba(158,43,37,0.07)',  label: 'Critical Alert' },
 };
 
 export function AlertBanner({ alerts, onAcknowledge }: Props) {
   if (alerts.length === 0) return null;
 
-  // Deduplicate: show only the most recent alert per severity
   const seen = new Set<string>();
   const deduped = alerts.filter(a => {
     if (seen.has(a.severity)) return false;
@@ -27,22 +26,22 @@ export function AlertBanner({ alerts, onAcknowledge }: Props) {
   return (
     <div className="flex flex-col gap-2">
       {deduped.map(alert => {
-        const cfg = SEVERITY_CONFIG[alert.severity];
-        const Icon = cfg.icon;
-        const isCritical = alert.severity === 'critical';
+        const cfg = SEVERITY[alert.severity] ?? SEVERITY.info;
         return (
           <div
             key={alert.id}
-            className={`flex items-start gap-3 p-3 rounded-xl border border-l-4 ${cfg.bg} ${cfg.border}`}
+            className="flex items-start gap-4 pl-4 pr-3 py-3"
+            style={{ background: cfg.tint, borderLeft: `2px solid ${cfg.color}` }}
           >
-            <Icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${cfg.text} ${isCritical ? 'animate-pulse' : ''}`} />
             <div className="flex-1 min-w-0">
-              <div className={`text-sm font-semibold ${cfg.text}`}>{cfg.label}</div>
-              <div className={`text-xs ${cfg.text} opacity-75 mt-0.5`}>{alert.message}</div>
+              <div className="font-mono uppercase" style={{ color: cfg.color, fontSize: '0.6875rem', letterSpacing: '0.12em', fontWeight: 500 }}>
+                {cfg.label}
+              </div>
+              <div className="text-muted mt-1" style={{ fontSize: '0.875rem', lineHeight: 1.4 }}>{alert.message}</div>
             </div>
             <button
               onClick={() => onAcknowledge(alert.id)}
-              className={`${cfg.text} opacity-50 hover:opacity-100 transition-opacity flex-shrink-0`}
+              className="text-faint hover:text-ink transition-colors flex-shrink-0 mt-0.5"
               title="Dismiss"
             >
               <X className="w-3.5 h-3.5" />

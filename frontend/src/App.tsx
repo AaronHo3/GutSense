@@ -5,71 +5,55 @@ import { PhysicianPortal } from './pages/PhysicianPortal';
 import { PatientDetail } from './pages/PatientDetail';
 import { IrisDashboard } from './pages/IrisDashboard';
 import { AnalyticsDashboard } from './pages/AnalyticsDashboard';
-import { Activity, Stethoscope, Database, BarChart2 } from 'lucide-react';
+
+const NAV = [
+  { to: '/patient/1', label: 'Patient' },
+  { to: '/physician', label: 'Physician' },
+  { to: '/iris', label: 'IRIS' },
+  { to: '/analytics', label: 'Analytics' },
+];
 
 function Nav() {
   return (
-    <nav className="px-6 py-3 flex items-center justify-between sticky top-0 z-10" style={{ background: 'rgba(6,12,26,0.85)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-      <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-lg bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-          <Activity className="w-4 h-4 text-white" />
-        </div>
-        <span className="font-bold text-white text-sm tracking-tight">GutSense</span>
-        <span className="text-xs text-slate-500 hidden sm:inline">CRC Screening Platform</span>
-      </div>
-      <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)' }}>
-        <NavLink
-          to="/patient/1"
-          className={({ isActive }) =>
-            `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              isActive
-                ? 'bg-white/15 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`
-          }
-        >
-          <Activity className="w-3.5 h-3.5" />
-          Patient
-        </NavLink>
-        <NavLink
-          to="/physician"
-          className={({ isActive }) =>
-            `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              isActive
-                ? 'bg-white/15 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`
-          }
-        >
-          <Stethoscope className="w-3.5 h-3.5" />
-          Physician
-        </NavLink>
-        <NavLink
-          to="/iris"
-          className={({ isActive }) =>
-            `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              isActive
-                ? 'bg-white/15 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`
-          }
-        >
-          <Database className="w-3.5 h-3.5" />
-          IRIS
-        </NavLink>
-        <NavLink
-          to="/analytics"
-          className={({ isActive }) =>
-            `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              isActive
-                ? 'bg-white/15 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`
-          }
-        >
-          <BarChart2 className="w-3.5 h-3.5" />
-          Analytics
-        </NavLink>
+    <nav
+      className="sticky top-0 z-20 px-4 sm:px-8 h-16 flex items-center justify-between gap-3"
+      style={{ background: 'rgba(244,241,234,0.82)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--line)' }}
+    >
+      <NavLink to="/patient/1" className="flex items-baseline gap-2.5 group flex-shrink-0">
+        <span className="font-serif text-ink leading-none text-xl sm:text-[1.35rem]" style={{ fontWeight: 500, letterSpacing: '-0.01em' }}>
+          GutSense
+        </span>
+        <span className="eyebrow hidden md:inline" style={{ fontSize: '0.625rem' }}>
+          Continuous CRC Screening
+        </span>
+      </NavLink>
+
+      <div className="flex items-center gap-4 sm:gap-7">
+        {NAV.map(item => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `relative pb-1 transition-colors text-[0.7rem] sm:text-xs ${isActive ? 'text-ink' : 'text-faint hover:text-muted'}`
+            }
+            style={{
+              fontFamily: "'Spline Sans Mono', monospace",
+              letterSpacing: '0.05em',
+            }}
+          >
+            {({ isActive }) => (
+              <>
+                {item.label}
+                {isActive && (
+                  <span
+                    className="absolute left-0 right-0 -bottom-px h-px"
+                    style={{ background: 'var(--ink)' }}
+                  />
+                )}
+              </>
+            )}
+          </NavLink>
+        ))}
       </div>
     </nav>
   );
@@ -78,7 +62,7 @@ function Nav() {
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1b3e 50%, #0a1628 100%)' }}>
+      <div className="min-h-screen bg-paper">
         <Nav />
         <Routes>
           <Route path="/" element={<Navigate to="/patient/1" replace />} />

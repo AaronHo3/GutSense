@@ -122,7 +122,7 @@ Current stool biomarker readings:
 - PGRP-S: {biomarkers['pgrp_s_ng_ml']:.1f} ng/mL  [normal <20, concerning >55, alarm >100]
 - Calprotectin: {biomarkers['calprotectin_ug_g']:.0f} µg/g  [normal <50, concerning >100, alarm >200]
 
-Composite risk score: {risk_score:.0f}/100 — {risk_label_map.get(risk_level, risk_level)}
+Composite risk score: {risk_score:.0f}/100 ({risk_label_map.get(risk_level, risk_level)})
 7-day trend: {trajectory}
 {f'Possible confounders: {confounded_by}' if confounded_by else ''}
 
@@ -183,10 +183,10 @@ def generate_referral(
     today = date.today().strftime("%B %d, %Y")
     sex_label = "male" if patient_sex == "M" else "female"
     urgency_map = {
-        "green":  ("Routine", "within 3–6 months"),
+        "green":  ("Routine", "within 3 to 6 months"),
         "yellow": ("Non-urgent", "within 3 months"),
         "orange": ("Semi-urgent", "within 2 weeks"),
-        "red":    ("URGENT", "as soon as possible — within 48–72 hours"),
+        "red":    ("URGENT", "as soon as possible, within 48 to 72 hours"),
     }
     urgency_label, urgency_timeline = urgency_map.get(risk_level, ("Routine", "within 3 months"))
 
@@ -215,11 +215,11 @@ Biomarker results:
 
 Composite GutSense risk score: {risk_score:.0f}/100
 7-day trend: {trajectory}
-Urgency: {urgency_label} — {urgency_timeline}
+Urgency: {urgency_label} ({urgency_timeline})
 
 Clinical assessment: {physician_summary}
 
-Write the letter in formal medical language. Today's date is {today}. Do not include a subject line like "Subject:" — use "Re:" inline in the header."""
+Write the letter in formal medical language. Today's date is {today}. Do not include a subject line like "Subject:"; use "Re:" inline in the header."""
 
     try:
         c = _get_client()
@@ -252,7 +252,7 @@ Write the letter in formal medical language. Today's date is {today}. Do not inc
 
 To: Gastroenterology Department
 From: Primary Care Physician (via GutSense Monitoring Platform)
-Re: {patient_name} — GI Referral
+Re: {patient_name}, GI Referral
 
 Dear Gastroenterology Colleague,
 
@@ -300,7 +300,7 @@ def _fallback_narrative(risk_level: str, trajectory: str, confounded_by: Optiona
     elif risk_level == "yellow":
         patient_exp = (
             "One or more of your stool biomarker readings are mildly above the normal range. "
-            "This is not an emergency — early changes like these are exactly what this system is designed to catch. "
+            "This is not an emergency. Early changes like these are exactly what this system is designed to catch. "
             "We recommend scheduling a check-in with your physician within the next three months for further evaluation."
         )
         physician_sum = (
@@ -315,7 +315,7 @@ def _fallback_narrative(risk_level: str, trajectory: str, confounded_by: Optiona
     elif risk_level == "orange":
         patient_exp = (
             "Several of your biomarker readings are significantly elevated, and the trend over recent weeks is concerning. "
-            "We strongly recommend scheduling an appointment with your doctor as soon as possible — ideally within the next two weeks. "
+            "We strongly recommend scheduling an appointment with your doctor as soon as possible, ideally within the next two weeks. "
             "Early evaluation gives the best outcomes."
         )
         physician_sum = (
@@ -331,8 +331,8 @@ def _fallback_narrative(risk_level: str, trajectory: str, confounded_by: Optiona
     else:  # red
         patient_exp = (
             "Your biomarker readings are critically elevated and require prompt medical attention. "
-            "Key indicators — including occult blood (Hemoglobin FIT), the inflammatory enzymes MPO, MMP-8 and MMP-9, "
-            "and fecal haptoglobin — are all significantly outside normal ranges. "
+            "Key indicators, including occult blood (Hemoglobin FIT), the inflammatory enzymes MPO, MMP-8 and MMP-9, "
+            "and fecal haptoglobin, are all significantly outside normal ranges. "
             "Please contact your doctor or go to an urgent care clinic today."
         )
         physician_sum = (
@@ -341,9 +341,9 @@ def _fallback_narrative(risk_level: str, trajectory: str, confounded_by: Optiona
             "(aggressive ECM degradation consistent with invasive lesion), calprotectin >200 µg/g, "
             f"fibrinogen and haptoglobin acutely elevated. Trajectory: {trajectory}. "
             "Findings warrant immediate clinical evaluation. Urgent GI referral and diagnostic colonoscopy strongly recommended. "
-            "Do not delay — early-stage detection is associated with >90% 5-year survival."
+            "Do not delay. Early-stage detection is associated with >90% 5-year survival."
         )
-        steps = ["Contact physician immediately — urgent referral required", "Schedule diagnostic colonoscopy", "Do not delay evaluation — urgent findings"]
+        steps = ["Contact physician immediately (urgent referral required)", "Schedule diagnostic colonoscopy", "Do not delay evaluation (urgent findings)"]
         urgency = "urgent"
 
     if confounded_by:

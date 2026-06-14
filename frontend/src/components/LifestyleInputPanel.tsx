@@ -1,6 +1,5 @@
 
 import { useState, useEffect } from 'react';
-import { Apple, Moon, Pill, Save, RefreshCw } from 'lucide-react';
 import { api } from '../api/endpoints';
 import type { LifestyleMetadata } from '../types';
 
@@ -45,112 +44,92 @@ export function LifestyleInputPanel({ patientId, onUpdate }: Props) {
     onUpdate?.();
   };
 
-  const sleepLabels = ['—', 'Poor', 'Fair', 'Okay', 'Good', 'Excellent'];
+  const sleepLabels = ['n/a', 'Poor', 'Fair', 'Okay', 'Good', 'Excellent'];
+  const antibioticOn = data.recent_antibiotic_use ?? false;
 
   return (
-    <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1 pb-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        Lifestyle Context
-      </h3>
-      <p className="text-xs text-slate-500 mb-4 mt-2">
-        Adjustments apply to the next incoming reading. Save then use <span className="font-medium text-slate-400">Recalculate</span> to apply immediately.
+    <div className="card p-6">
+      <span className="eyebrow">Lifestyle Context</span>
+      <p className="text-muted mt-3 mb-5" style={{ fontSize: '0.8125rem', lineHeight: 1.5 }}>
+        Adjustments apply to the next incoming reading. Save, then use Recalculate to apply immediately.
       </p>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Antibiotics toggle */}
-        <label className="flex items-center justify-between cursor-pointer group">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-orange-500/15 flex items-center justify-center flex-shrink-0">
-              <Pill className="w-3.5 h-3.5 text-orange-400" />
-            </div>
-            <div>
-              <div className="text-sm text-slate-200 font-medium">Recent antibiotic use</div>
-              <div className="text-xs text-slate-500">Adjusts microbiome markers</div>
-            </div>
+        <label className="flex items-center justify-between cursor-pointer">
+          <div>
+            <div className="text-ink" style={{ fontSize: '0.9375rem' }}>Recent antibiotic use</div>
+            <div className="font-mono text-faint mt-0.5" style={{ fontSize: '0.6875rem' }}>Adjusts microbiome markers</div>
           </div>
           <div className="relative">
             <input
               type="checkbox"
               className="sr-only"
-              checked={data.recent_antibiotic_use ?? false}
+              checked={antibioticOn}
               onChange={e => setData(d => ({ ...d, recent_antibiotic_use: e.target.checked }))}
             />
-            <div
-              className={`w-9 h-5 rounded-full transition-colors ${data.recent_antibiotic_use ? 'bg-orange-500' : 'bg-white/15'}`}
-            >
-              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-0.5 ${data.recent_antibiotic_use ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
+            <div className="w-9 h-5 rounded-full transition-colors" style={{ background: antibioticOn ? 'var(--ink)' : 'var(--line2)' }}>
+              <div className="w-4 h-4 rounded-full transition-transform mt-0.5" style={{ background: 'var(--surface)', transform: antibioticOn ? 'translateX(18px)' : 'translateX(2px)' }} />
             </div>
           </div>
         </label>
 
         {/* Fiber intake */}
         <div>
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
-              <Apple className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <div className="flex-1 flex items-center justify-between">
-              <span className="text-sm text-slate-200 font-medium">Daily fiber intake</span>
-              <span className="text-sm font-bold text-emerald-400">{data.fiber_intake_g_day ?? 20}g</span>
-            </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-ink" style={{ fontSize: '0.9375rem' }}>Daily fiber intake</span>
+            <span className="font-mono tnum text-ink" style={{ fontSize: '0.875rem', fontWeight: 500 }}>{data.fiber_intake_g_day ?? 20}g</span>
           </div>
           <input
             type="range"
             min={0} max={60} step={1}
             value={data.fiber_intake_g_day ?? 20}
             onChange={e => setData(d => ({ ...d, fiber_intake_g_day: Number(e.target.value) }))}
-            className="w-full accent-emerald-400 ml-9"
-            style={{ width: 'calc(100% - 2.25rem)' }}
+            className="w-full"
+            style={{ accentColor: '#1B1A17' }}
           />
-          <div className="flex justify-between text-xs text-slate-600 mt-0.5 ml-9">
+          <div className="flex justify-between font-mono text-faint mt-1" style={{ fontSize: '0.625rem' }}>
             <span>0g</span><span>25g target</span><span>60g</span>
           </div>
         </div>
 
         {/* Sleep quality */}
         <div>
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
-              <Moon className="w-3.5 h-3.5 text-indigo-400" />
-            </div>
-            <div className="flex-1 flex items-center justify-between">
-              <span className="text-sm text-slate-200 font-medium">Sleep quality</span>
-              <span className="text-sm font-bold text-indigo-400">{sleepLabels[data.sleep_quality ?? 3]}</span>
-            </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-ink" style={{ fontSize: '0.9375rem' }}>Sleep quality</span>
+            <span className="font-mono text-ink" style={{ fontSize: '0.875rem', fontWeight: 500 }}>{sleepLabels[data.sleep_quality ?? 3]}</span>
           </div>
           <input
             type="range"
             min={1} max={5} step={1}
             value={data.sleep_quality ?? 3}
             onChange={e => setData(d => ({ ...d, sleep_quality: Number(e.target.value) }))}
-            className="w-full accent-indigo-400 ml-9"
-            style={{ width: 'calc(100% - 2.25rem)' }}
+            className="w-full"
+            style={{ accentColor: '#1B1A17' }}
           />
         </div>
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-6 flex gap-2.5">
         <button
           onClick={handleSave}
           disabled={saving}
-          className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-xl transition shadow-sm font-medium ${
-            saved
-              ? 'bg-emerald-500 text-white'
-              : 'text-white hover:bg-white/20'
-          } disabled:opacity-50`}
-          style={saved ? {} : { background: 'rgba(255,255,255,0.1)' }}
+          className="flex-1 px-4 py-2 font-mono uppercase transition disabled:opacity-40"
+          style={{
+            background: saved ? '#2F6B4F' : 'var(--ink)',
+            color: 'var(--paper)', borderRadius: 4, fontSize: '0.6875rem', letterSpacing: '0.08em',
+          }}
         >
-          <Save className="w-3.5 h-3.5" />
-          {saving ? 'Saving...' : saved ? 'Saved!' : 'Save'}
+          {saving ? 'Saving…' : saved ? 'Saved' : 'Save'}
         </button>
         <button
           onClick={handleRecalculate}
           disabled={recalculating}
-          className="flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-xl transition shadow-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="px-4 py-2 font-mono uppercase text-muted hover:text-ink transition disabled:opacity-40"
+          style={{ border: '1px solid var(--line2)', borderRadius: 4, fontSize: '0.6875rem', letterSpacing: '0.08em' }}
           title="Re-score the latest reading with current lifestyle data"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${recalculating ? 'animate-spin' : ''}`} />
-          {recalculating ? 'Updating...' : 'Recalculate'}
+          {recalculating ? 'Updating…' : 'Recalculate'}
         </button>
       </div>
     </div>

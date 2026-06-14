@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600&family=Instrument+Sans:wght@400;500&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#F4F1EA; --surface:#FCFBF8; --ink:#1B1A17; --muted:#56524A;
+    --faint:#8C8779; --line:#E4DFD3; --line2:#D2CCBD;
+    --low:#2F6B4F; --elevated:#9A7A24; --high:#B35C33; --critical:#9E2B25;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--paper); color:var(--ink); font-family:'Instrument Sans',sans-serif; -webkit-font-smoothing:antialiased;}
+  .canvas{width:1640px; padding:64px 72px 72px;}
+  .serif{font-family:'Fraunces',serif; font-optical-sizing:auto;}
+  .mono{font-family:'Spline Sans Mono',monospace;}
+  .eyebrow{font-family:'Spline Sans Mono',monospace; text-transform:uppercase; letter-spacing:.18em; font-size:11px; color:var(--faint); font-weight:500;}
+
+  /* Header */
+  .title{font-family:'Fraunces',serif; font-size:46px; font-weight:430; letter-spacing:-.02em; margin-top:14px; line-height:1;}
+  .subtitle{color:var(--muted); font-size:15px; margin-top:14px; max-width:760px; line-height:1.5;}
+  .rule{border:0; border-top:1px solid var(--ink); margin:28px 0 0;}
+
+  /* Flow grid: three stages */
+  .flow{display:grid; grid-template-columns: 280px 56px 1fr 56px 300px; align-items:stretch; margin-top:44px; gap:0;}
+  .arrowcol{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;}
+  .arrow{color:var(--ink); font-size:22px; line-height:1;}
+  .arrowlbl{font-family:'Spline Sans Mono',monospace; font-size:10px; color:var(--faint); writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:.08em; text-transform:uppercase; white-space:nowrap;}
+
+  .panel{background:var(--surface); border:1px solid var(--line2); border-radius:5px; padding:22px 22px 24px; display:flex; flex-direction:column;}
+  .panel h3{font-family:'Fraunces',serif; font-size:21px; font-weight:450; line-height:1.1;}
+  .panel .kicker{margin-bottom:14px;}
+  .panel .desc{color:var(--muted); font-size:12.5px; line-height:1.5; margin-top:8px;}
+
+  /* biomarker list */
+  .markers{margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:5px 16px;}
+  .markers li{list-style:none; font-family:'Spline Sans Mono',monospace; font-size:11px; color:var(--muted); display:flex; justify-content:space-between; border-bottom:1px solid var(--line); padding-bottom:4px;}
+  .markers li span:last-child{color:var(--faint);}
+
+  /* pipeline steps */
+  .steps{margin-top:8px; display:flex; flex-direction:column;}
+  .step{padding:13px 0; border-top:1px solid var(--line); display:flex; gap:14px; align-items:flex-start;}
+  .step:first-child{border-top:0;}
+  .step .n{font-family:'Spline Sans Mono',monospace; font-size:11px; color:var(--faint); padding-top:2px; min-width:20px;}
+  .step .body .name{font-size:14px; font-weight:500; color:var(--ink);}
+  .step .body .meta{font-family:'Spline Sans Mono',monospace; font-size:11px; color:var(--muted); margin-top:3px; line-height:1.5;}
+  .tag{font-family:'Spline Sans Mono',monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; padding:2px 7px; border:1px solid currentColor; border-radius:3px; margin-left:8px; vertical-align:middle;}
+  .t-bg{color:var(--high);}
+  .t-out{color:var(--low);}
+
+  /* dashboards */
+  .views{margin-top:16px; display:flex; flex-direction:column;}
+  .view{padding:11px 0; border-top:1px solid var(--line); font-size:13.5px; display:flex; justify-content:space-between; align-items:baseline;}
+  .view:first-child{border-top:0;}
+  .view .vmeta{font-family:'Spline Sans Mono',monospace; font-size:10px; color:var(--faint); text-transform:uppercase; letter-spacing:.06em;}
+
+  /* backend header row */
+  .bk-head{display:flex; justify-content:space-between; align-items:baseline; border-bottom:1px solid var(--line2); padding-bottom:12px; margin-bottom:4px;}
+
+  /* footer datastores */
+  .stores{display:flex; gap:36px; margin-top:40px; padding-top:22px; border-top:1px solid var(--line);}
+  .store{flex:1;}
+  .store .lbl{margin-bottom:8px;}
+  .store .val{font-family:'Spline Sans Mono',monospace; font-size:12px; color:var(--muted); line-height:1.6;}
+  .legend{display:flex; gap:24px; margin-top:8px; align-items:center;}
+  .legend .item{display:flex; gap:7px; align-items:center; font-family:'Spline Sans Mono',monospace; font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+  .dot{width:9px; height:9px; border-radius:50%;}
+
+  .credit{margin-top:36px; display:flex; justify-content:space-between; align-items:baseline; color:var(--faint);}
+  .credit .mono{font-size:11px;}
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <!-- Masthead -->
+    <span class="eyebrow">System Architecture</span>
+    <h1 class="title">GutSense: Sensor to Screen</h1>
+    <p class="subtitle">A toilet-mounted biosensor streams eight stool biomarkers to a FastAPI backend, where a two-stage neural risk model and a dual retrieval layer turn raw readings into a 0 to 100 risk score and AI-written clinical narratives, surfaced on patient and physician dashboards.</p>
+    <hr class="rule" />
+
+    <!-- Three-stage flow -->
+    <div class="flow">
+
+      <!-- Stage 1: sensor -->
+      <div class="panel">
+        <span class="eyebrow kicker">Edge · Capture</span>
+        <h3>Toilet Biosensor</h3>
+        <p class="desc">8 molecular biomarkers measured passively at every visit, with no behavior change.</p>
+        <ul class="markers">
+          <li><span>Hgb-FIT</span><span>25%</span></li>
+          <li><span>Calprotectin</span><span>20%</span></li>
+          <li><span>MMP-9</span><span>15%</span></li>
+          <li><span>MPO</span><span>15%</span></li>
+          <li><span>MMP-8</span><span>10%</span></li>
+          <li><span>Fibrinogen</span><span>8%</span></li>
+          <li><span>Haptoglobin</span><span>5%</span></li>
+          <li><span>PGRP-S</span><span>2%</span></li>
+        </ul>
+      </div>
+
+      <!-- arrow -->
+      <div class="arrowcol">
+        <span class="arrowlbl">POST /api/ingest</span>
+        <span class="arrow">→</span>
+      </div>
+
+      <!-- Stage 2: backend -->
+      <div class="panel">
+        <div class="bk-head">
+          <div>
+            <span class="eyebrow">Server · Scoring Pipeline</span>
+            <h3 style="margin-top:8px;">GutSense Backend &nbsp;<span class="mono" style="font-size:13px; color:var(--faint);">FastAPI · Python</span></h3>
+          </div>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <span class="n">01</span>
+            <div class="body">
+              <div class="name">Sigmoid feature engineering</div>
+              <div class="meta">8 raw values → 8 calibrated component scores (0–100)</div>
+            </div>
+          </div>
+          <div class="step">
+            <span class="n">02</span>
+            <div class="body">
+              <div class="name">SQLite kNN retrieval<span class="tag t-bg">RAG · features</span></div>
+              <div class="meta">Manhattan distance → 3 nearest patients' scores fed in as features</div>
+            </div>
+          </div>
+          <div class="step">
+            <span class="n">03</span>
+            <div class="body">
+              <div class="name">Neural network risk model<span class="tag t-out">output 0–100</span></div>
+              <div class="meta">MLP 13 → 32 → 16 → 1 · trained on 5,000 synthetic samples</div>
+            </div>
+          </div>
+          <div class="step">
+            <span class="n">04</span>
+            <div class="body">
+              <div class="name">Trend regression</div>
+              <div class="meta">14-reading linear fit → Stable / Rising / Improving</div>
+            </div>
+          </div>
+          <div class="step">
+            <span class="n">05</span>
+            <div class="body">
+              <div class="name">Alert service</div>
+              <div class="meta">Threshold ≥ 60 · deduped · antibiotic-confound suppression</div>
+            </div>
+          </div>
+          <div class="step">
+            <span class="n">06</span>
+            <div class="body">
+              <div class="name">IRIS vector RAG → Claude → store<span class="tag t-bg">background</span></div>
+              <div class="meta">VECTOR_COSINE similar cases → Sonnet 4.6 narratives → write back to IRIS</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- arrow -->
+      <div class="arrowcol">
+        <span class="arrowlbl">poll · 10s</span>
+        <span class="arrow">→</span>
+      </div>
+
+      <!-- Stage 3: dashboards -->
+      <div class="panel">
+        <span class="eyebrow kicker">Client · Presentation</span>
+        <h3>Dashboards &nbsp;<span class="mono" style="font-size:12px; color:var(--faint);">React · TS</span></h3>
+        <p class="desc">Typed SPA, live-polling every 10s. Dark-to-light editorial design system.</p>
+        <div class="views">
+          <div class="view"><span>Patient Dashboard</span><span class="vmeta">gauge · AI</span></div>
+          <div class="view"><span>Physician Roster</span><span class="vmeta">ranked</span></div>
+          <div class="view"><span>Physician Deep-dive</span><span class="vmeta">8 charts</span></div>
+          <div class="view"><span>IRIS Vector View</span><span class="vmeta">similarity</span></div>
+          <div class="view"><span>Analytics</span><span class="vmeta">cohort</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data stores -->
+    <div class="stores">
+      <div class="store">
+        <span class="eyebrow lbl">Data Stores</span>
+        <div class="val">SQLite: patients · readings · assessments · alerts · notes<br/>InterSystems IRIS: FHIR observations + VECTOR embeddings</div>
+      </div>
+      <div class="store">
+        <span class="eyebrow lbl">AI & Embeddings</span>
+        <div class="val">Anthropic Claude Sonnet 4.6: structured tool-use narratives<br/>OpenAI text-embedding-3-small: FHIR clinical text vectors</div>
+      </div>
+      <div class="store">
+        <span class="eyebrow lbl">Resilience</span>
+        <div class="val">Claude down → rule-based fallback per risk level<br/>IRIS down → pipeline continues without vector context</div>
+      </div>
+    </div>
+
+    <!-- Legend + credit -->
+    <div class="credit">
+      <div class="legend">
+        <div class="item"><span class="dot" style="background:var(--low)"></span> Low</div>
+        <div class="item"><span class="dot" style="background:var(--elevated)"></span> Elevated</div>
+        <div class="item"><span class="dot" style="background:var(--high)"></span> High</div>
+        <div class="item"><span class="dot" style="background:var(--critical)"></span> Critical</div>
+      </div>
+      <span class="mono">GutSense · MIT Grand Hack 2026</span>
+    </div>
+  </div>
+</body>
+</html>

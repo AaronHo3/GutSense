@@ -1,14 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Zap, Clock, CalendarDays, TrendingUp, TrendingDown, Minus, FileText } from 'lucide-react';
-
-const TRAJECTORY_META: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  'Rapidly Increasing': { icon: <TrendingUp className="w-3 h-3" />, color: '#f87171', label: 'Rising fast' },
-  'Slowly Increasing':  { icon: <TrendingUp className="w-3 h-3" />, color: '#fbbf24', label: 'Trending up' },
-  'Stable':             { icon: <Minus className="w-3 h-3" />,       color: '#94a3b8', label: 'No change' },
-  'Improving':          { icon: <TrendingDown className="w-3 h-3" />, color: '#34d399', label: 'Improving' },
-};
+import { ArrowLeft, Zap, FileText } from 'lucide-react';
 import { usePatientData } from '../hooks/usePatientData';
 import { useAlerts } from '../hooks/useAlerts';
 import { RiskScore } from '../components/RiskScore';
@@ -16,9 +9,35 @@ import { BiomarkerChart, MARKERS } from '../components/BiomarkerChart';
 import { AlertBanner } from '../components/AlertBanner';
 import { ClinicalNotes } from '../components/ClinicalNotes';
 import { ReportPanel } from '../components/ReportPanel';
+import { ScoreBreakdown } from '../components/ScoreBreakdown';
 import { ReferralModal } from '../components/ReferralModal';
 import { api } from '../api/endpoints';
 import type { Patient, ClinicalNote } from '../types';
+
+const TRAJECTORY_GLYPH: Record<string, string> = {
+  'Rapidly Increasing': '↑↑',
+  'Slowly Increasing': '↑',
+  'Stable': '→',
+  'Improving': '↓',
+};
+
+const LEVEL_META: Record<string, { color: string; label: string }> = {
+  green:  { color: '#2F6B4F', label: 'Low' },
+  yellow: { color: '#9A7A24', label: 'Elevated' },
+  orange: { color: '#B35C33', label: 'High' },
+  red:    { color: '#9E2B25', label: 'Critical' },
+};
+
+function StatCell({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="px-5 py-4 first:pl-0">
+      <div className="font-mono tnum" style={{ fontSize: '1.5rem', lineHeight: 1, color: color ?? 'var(--ink)', fontWeight: 500 }}>
+        {value}
+      </div>
+      <div className="eyebrow mt-2">{label}</div>
+    </div>
+  );
+}
 
 export function PatientDetail() {
   const { patientId } = useParams<{ patientId: string }>();
@@ -51,54 +70,54 @@ export function PatientDetail() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen text-slate-400 text-sm">Loading...</div>;
+    return <div className="flex items-center justify-center min-h-[60vh] eyebrow">Loading…</div>;
   }
 
   const lastReadingTime = latestRisk
     ? new Date(latestRisk.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    : '—';
+    : 'n/a';
   const daysMonitored = readings.length > 0
     ? Math.round((Date.now() - new Date(readings[0].timestamp).getTime()) / 86400000)
     : 0;
-
-  const levelColors: Record<string, string> = {
-    green: 'bg-emerald-500/15 text-emerald-400',
-    yellow: 'bg-yellow-500/15 text-yellow-400',
-    orange: 'bg-orange-500/15 text-orange-400',
-    red: 'bg-red-500/15 text-red-400',
-  };
+  const meta = latestRisk ? LEVEL_META[latestRisk.risk_level] : LEVEL_META.green;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate('/physician')}
-          className="p-2 rounded-lg text-slate-400 hover:text-white transition flex-shrink-0"
-          style={{ background: 'rgba(255,255,255,0.06)' }}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-base font-bold text-white">{patient?.name ?? 'Patient'}</h1>
+    <div className="max-w-5xl mx-auto px-5 sm:px-8 py-10 sm:py-14">
+
+      {/* Back link */}
+      <button
+        onClick={() => navigate('/physician')}
+        className="flex items-center gap-2 eyebrow hover:text-ink transition-colors mb-6"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" />
+        Roster
+      </button>
+
+      {/* Masthead */}
+      <header className="rise flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="eyebrow">Patient File</span>
             {latestRisk && (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${levelColors[latestRisk.risk_level]}`}>
-                {latestRisk.risk_level === 'green' ? 'Low' : latestRisk.risk_level === 'yellow' ? 'Elevated' : latestRisk.risk_level === 'orange' ? 'High' : 'Critical'}
+              <span className="font-mono uppercase" style={{ fontSize: '0.625rem', letterSpacing: '0.12em', color: meta.color }}>
+                · {meta.label} Risk
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500">
-            {patient && `${patient.age}${patient.sex}`}
-            {patient?.family_history && ' · Family history of CRC'}
-            {patient?.has_nod2_variant && ' · NOD2 variant'}
+          <h1 className="font-serif text-ink mt-3" style={{ fontSize: 'clamp(2.25rem, 5vw, 3.5rem)', lineHeight: 1, fontWeight: 420, letterSpacing: '-0.02em' }}>
+            {patient?.name ?? 'Patient'}
+          </h1>
+          <p className="font-mono text-muted mt-3" style={{ fontSize: '0.8125rem' }}>
+            {patient && `${patient.age} · ${patient.sex === 'M' ? 'Male' : 'Female'}`}
+            {patient?.family_history && '  ·  Family history of CRC'}
+            {patient?.has_nod2_variant && '  ·  NOD2 variant'}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setShowReferral(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-white text-xs rounded-lg transition"
-            style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}
+            className="flex items-center gap-2 px-4 py-2 text-paper font-mono uppercase transition"
+            style={{ background: 'var(--ink)', borderRadius: 4, fontSize: '0.6875rem', letterSpacing: '0.08em' }}
           >
             <FileText className="w-3.5 h-3.5" />
             Referral
@@ -106,83 +125,68 @@ export function PatientDetail() {
           <button
             onClick={handleSpike}
             disabled={spiking}
-            className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs rounded-lg transition disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 text-muted hover:text-ink font-mono uppercase transition disabled:opacity-40"
+            style={{ border: '1px solid var(--line2)', borderRadius: 4, fontSize: '0.6875rem', letterSpacing: '0.08em' }}
           >
             <Zap className="w-3.5 h-3.5" />
-            {spiking ? 'Simulating...' : 'Simulate Spike'}
+            {spiking ? 'Simulating…' : 'Spike'}
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Stats strip */}
+      {/* Stat band */}
       {latestRisk && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="text-2xl font-bold tabular-nums" style={{ color: latestRisk.risk_level === 'green' ? '#34d399' : latestRisk.risk_level === 'yellow' ? '#fbbf24' : latestRisk.risk_level === 'orange' ? '#fb923c' : '#f87171' }}>
-              {Math.round(latestRisk.adjusted_score)}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5">Risk Score</div>
-          </div>
-          <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            {(() => { const t = TRAJECTORY_META[latestRisk.trajectory] ?? TRAJECTORY_META['Stable']; return (
-              <>
-                <div className="text-sm font-semibold flex items-center justify-center gap-1 truncate" style={{ color: t.color }}>
-                  {t.icon}{latestRisk.trajectory}
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5">{t.label}</div>
-              </>
-            ); })()}
-          </div>
-          <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="text-xs font-semibold text-white truncate">{lastReadingTime}</div>
-            <div className="text-xs text-slate-500 mt-0.5 flex items-center justify-center gap-1">
-              <Clock className="w-3 h-3" />Last Reading
-            </div>
-          </div>
-          <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="text-2xl font-bold text-white tabular-nums">{daysMonitored}</div>
-            <div className="text-xs text-slate-500 mt-0.5 flex items-center justify-center gap-1">
-              <CalendarDays className="w-3 h-3" />Days Monitored
-            </div>
-          </div>
+        <div className="mt-8 flex flex-wrap divide-x rise" style={{ borderTop: '1px solid var(--ink)', borderBottom: '1px solid var(--line)', borderColor: 'var(--line)' }}>
+          <StatCell label="Risk Score" value={String(Math.round(latestRisk.adjusted_score))} color={meta.color} />
+          <StatCell label="Trajectory" value={`${TRAJECTORY_GLYPH[latestRisk.trajectory] ?? '→'} ${latestRisk.trajectory}`} />
+          <StatCell label="Last Reading" value={lastReadingTime} />
+          <StatCell label="Days Monitored" value={String(daysMonitored)} />
         </div>
       )}
 
       {/* Alerts */}
-      <AlertBanner alerts={alerts} onAcknowledge={acknowledge} />
+      <div className="mt-6">
+        <AlertBanner alerts={alerts} onAcknowledge={acknowledge} />
+      </div>
 
-      {/* Risk gauge + AI report + score breakdown */}
+      {/* Gauge + AI + breakdown */}
       {latestRisk && (
-        <div className="flex flex-col sm:flex-row gap-4 items-start">
-          <div className="flex-shrink-0 flex justify-center w-full sm:w-auto">
+        <section className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-6 items-stretch rise" style={{ animationDelay: '0.08s' }}>
+          <div className="card flex items-center justify-center py-10">
             <RiskScore
               score={latestRisk.adjusted_score}
               level={latestRisk.risk_level}
               trajectory={latestRisk.trajectory}
             />
           </div>
-          <div className="flex-1 space-y-3">
-            <ReportPanel risk={latestRisk} mode="physician" />
-          </div>
+          <ReportPanel risk={latestRisk} mode="physician" />
+        </section>
+      )}
+
+      {latestRisk && (
+        <div className="mt-6">
+          <ScoreBreakdown risk={latestRisk} />
         </div>
       )}
 
       {/* Biomarker trends */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 pb-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          Biomarker Trends
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <section className="mt-14">
+        <div className="flex items-baseline justify-between pb-3" style={{ borderBottom: '1px solid var(--ink)' }}>
+          <h2 className="font-serif text-ink" style={{ fontSize: '1.5rem', fontWeight: 420 }}>Biomarker Trends</h2>
+          <span className="eyebrow hidden sm:block">8 markers · 90-day window</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6">
           {MARKERS.map(marker => (
             <BiomarkerChart key={marker.key} readings={readings} marker={marker} />
           ))}
         </div>
-      </div>
+      </section>
 
       {/* Clinical notes */}
-      <ClinicalNotes notes={notes} onAdd={handleAddNote} allowAdd />
+      <div className="mt-6">
+        <ClinicalNotes notes={notes} onAdd={handleAddNote} allowAdd />
+      </div>
 
-      {/* Referral modal */}
       {showReferral && patient && (
         <ReferralModal
           patientId={id}

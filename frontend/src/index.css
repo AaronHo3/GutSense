@@ -2,12 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --paper: #F4F1EA;
+  --surface: #FCFBF8;
+  --ink: #1B1A17;
+  --muted: #56524A;
+  --faint: #8C8779;
+  --line: #E4DFD3;
+  --line2: #D2CCBD;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 body {
   margin: 0;
-  background: #f8fafc;
-  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: 'ss01';
 }
 
 #root {
   min-height: 100vh;
 }
+
+/* Display serif — optical sizing for headlines */
+.font-serif {
+  font-optical-sizing: auto;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Eyebrow / section label — monospace, uppercase, tracked out */
+.eyebrow {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--faint);
+  font-weight: 500;
+}
+
+/* Editorial card — paper surface, hairline, no glow */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+/* Hairline divider */
+.hairline {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+/* Tabular figures for any numeric data */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Subtle staggered entrance for the dashboard load */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise {
+  animation: riseIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Custom details marker removal */
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }

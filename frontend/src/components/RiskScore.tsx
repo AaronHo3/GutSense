@@ -1,6 +1,4 @@
 
-import { TrendingUp, TrendingDown, Minus, Flame } from 'lucide-react';
-
 interface Props {
   score: number;
   level: 'green' | 'yellow' | 'orange' | 'red';
@@ -8,94 +6,108 @@ interface Props {
   size?: number;
 }
 
-const LEVEL_COLORS = {
-  green:  { stroke: '#34d399', text: '#34d399', glow: 'rgba(52,211,153,0.25)',  label: 'Low Risk' },
-  yellow: { stroke: '#fbbf24', text: '#fbbf24', glow: 'rgba(251,191,36,0.25)',  label: 'Elevated' },
-  orange: { stroke: '#fb923c', text: '#fb923c', glow: 'rgba(251,146,60,0.25)',  label: 'High Risk' },
-  red:    { stroke: '#f87171', text: '#f87171', glow: 'rgba(248,113,113,0.35)', label: 'Critical' },
+const LEVEL_META = {
+  green:  { color: '#2F6B4F', label: 'Low Risk' },
+  yellow: { color: '#9A7A24', label: 'Elevated' },
+  orange: { color: '#B35C33', label: 'High Risk' },
+  red:    { color: '#9E2B25', label: 'Critical' },
 };
 
-function TrajectoryIcon({ trajectory }: { trajectory: string }) {
-  const cls = 'w-3.5 h-3.5';
-  if (trajectory === 'Rapidly Increasing') return <Flame className={`${cls} text-red-500`} />;
-  if (trajectory === 'Slowly Increasing')  return <TrendingUp className={`${cls} text-orange-400`} />;
-  if (trajectory === 'Improving')          return <TrendingDown className={`${cls} text-green-500`} />;
-  return <Minus className={`${cls} text-slate-400`} />;
-}
+const TRAJECTORY_GLYPH: Record<string, string> = {
+  'Rapidly Increasing': '↑↑',
+  'Slowly Increasing': '↑',
+  'Stable': '→',
+  'Improving': '↓',
+};
 
-export function RiskScore({ score, level, trajectory, size = 180 }: Props) {
-  const colors = LEVEL_COLORS[level];
-  const radius = size / 2 - 14;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference * (1 - score / 100);
+export function RiskScore({ score, level, trajectory, size = 208 }: Props) {
+  const { color, label } = LEVEL_META[level];
+  const stroke = 3;
+  const radius = size / 2 - 18;
   const center = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  const fraction = Math.max(0, Math.min(1, score / 100));
+  const dashOffset = circumference * (1 - fraction);
+
+  // End-cap marker position (track starts at top, sweeps clockwise)
+  const endAngle = -Math.PI / 2 + fraction * 2 * Math.PI;
+  const markerX = center + radius * Math.cos(endAngle);
+  const markerY = center + radius * Math.sin(endAngle);
+
+  // Major ticks at 0 / 25 / 50 / 75
+  const ticks = [0, 0.25, 0.5, 0.75].map(t => {
+    const a = -Math.PI / 2 + t * 2 * Math.PI;
+    const inner = radius + 6;
+    const outer = radius + 10;
+    return {
+      x1: center + inner * Math.cos(a), y1: center + inner * Math.sin(a),
+      x2: center + outer * Math.cos(a), y2: center + outer * Math.sin(a),
+    };
+  });
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      {/* Gauge card */}
-      <div
-        className="rounded-2xl p-5 flex flex-col items-center"
-        style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${colors.stroke}30`, backdropFilter: 'blur(12px)' }}
-      >
-        {/* Glow layer */}
+    <div className="flex flex-col items-center">
+      <span className="eyebrow mb-4">Risk Index</span>
+
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          {/* Hairline track */}
+          <circle
+            cx={center} cy={center} r={radius}
+            fill="none" stroke="#D2CCBD" strokeWidth={stroke}
+          />
+          {/* Signal arc */}
+          <circle
+            cx={center} cy={center} r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            style={{ transition: 'stroke-dashoffset 1s cubic-bezier(0.22,1,0.36,1)' }}
+          />
+        </svg>
+
+        {/* Ticks (drawn upright, not rotated) */}
+        <svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0 }}>
+          {ticks.map((t, i) => (
+            <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="#D2CCBD" strokeWidth={1} />
+          ))}
+          <circle cx={markerX} cy={markerY} r={4.5} fill={color} />
+        </svg>
+
+        {/* Numeral */}
         <div
-          className="absolute rounded-full blur-2xl pointer-events-none"
           style={{
-            width: size * 0.7,
-            height: size * 0.7,
-            background: colors.glow,
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
           }}
-        />
-        <div style={{ position: 'relative' }}>
-          <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-            {/* Track ring */}
-            <circle
-              cx={center} cy={center} r={radius}
-              fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={11}
-            />
-            {/* Score arc */}
-            <circle
-              cx={center} cy={center} r={radius}
-              fill="none"
-              stroke={colors.stroke}
-              strokeWidth={11}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              style={{ transition: 'stroke-dashoffset 0.9s cubic-bezier(.4,0,.2,1)', filter: `drop-shadow(0 0 6px ${colors.glow})` }}
-            />
-          </svg>
-          {/* Score text centered */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, width: size, height: size,
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-            }}
+        >
+          <span
+            className="font-serif tnum"
+            style={{ fontSize: '4.25rem', lineHeight: 0.9, fontWeight: 460, color, letterSpacing: '-0.02em' }}
           >
-            <div className="text-5xl font-bold tabular-nums" style={{ color: colors.text, lineHeight: 1 }}>
-              {Math.round(score)}
-            </div>
-            <div className="text-xs font-medium mt-1" style={{ color: colors.text, opacity: 0.6 }}>
-              / 100
-            </div>
-          </div>
+            {Math.round(score)}
+          </span>
+          <span className="font-mono text-faint" style={{ fontSize: '0.7rem', marginTop: 2 }}>
+            / 100
+          </span>
         </div>
       </div>
 
-      {/* Label + trajectory below */}
-      <div className="text-center space-y-1">
-        <div
-          className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
-          style={{ background: colors.glow, color: colors.text }}
+      {/* Level + trajectory */}
+      <div className="mt-5 flex flex-col items-center gap-1.5">
+        <span
+          className="font-mono uppercase"
+          style={{ color, fontSize: '0.8125rem', letterSpacing: '0.12em', fontWeight: 500 }}
         >
-          {colors.label}
-        </div>
-        <div className="flex items-center justify-center gap-1 text-xs text-slate-400">
-          <TrajectoryIcon trajectory={trajectory} />
-          <span>{trajectory}</span>
-        </div>
+          {label}
+        </span>
+        <span className="font-mono text-muted" style={{ fontSize: '0.6875rem', letterSpacing: '0.04em' }}>
+          {TRAJECTORY_GLYPH[trajectory] ?? '→'} {trajectory}
+        </span>
       </div>
     </div>
   );

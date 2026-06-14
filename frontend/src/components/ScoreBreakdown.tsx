@@ -5,22 +5,22 @@ interface Props {
   risk: RiskAssessment;
 }
 
-const MARKER_META: Record<string, { label: string; weight: number; color: string; unit: string }> = {
-  hemoglobin_fit: { label: 'Hemoglobin FIT (Occult Blood)', weight: 0.25, color: '#ef4444', unit: 'ng/mL' },
-  calprotectin:   { label: 'Calprotectin (Inflammation)',   weight: 0.20, color: '#f97316', unit: 'µg/g' },
-  mmp9:           { label: 'MMP-9 (Tissue Remodeling)',     weight: 0.15, color: '#8b5cf6', unit: 'ng/mL' },
-  mpo:            { label: 'MPO (Neutrophil Activity)',      weight: 0.15, color: '#ec4899', unit: 'ng/mL' },
-  mmp8:           { label: 'MMP-8 (Neutrophil Collagenase)',weight: 0.10, color: '#06b6d4', unit: 'ng/mL' },
-  fibrinogen:     { label: 'Fibrinogen (Fecal)',            weight: 0.08, color: '#f59e0b', unit: 'ng/mL' },
-  haptoglobin:    { label: 'Haptoglobin (Fecal)',           weight: 0.05, color: '#10b981', unit: 'µg/g' },
-  pgrp_s:         { label: 'PGRP-S (Innate Immunity)',      weight: 0.02, color: '#3b82f6', unit: 'ng/mL' },
+const MARKER_META: Record<string, { label: string; weight: number }> = {
+  hemoglobin_fit: { label: 'Hemoglobin FIT', weight: 0.25 },
+  calprotectin:   { label: 'Calprotectin', weight: 0.20 },
+  mmp9:           { label: 'MMP-9', weight: 0.15 },
+  mpo:            { label: 'MPO', weight: 0.15 },
+  mmp8:           { label: 'MMP-8', weight: 0.10 },
+  fibrinogen:     { label: 'Fibrinogen', weight: 0.08 },
+  haptoglobin:    { label: 'Haptoglobin', weight: 0.05 },
+  pgrp_s:         { label: 'PGRP-S', weight: 0.02 },
 };
 
-function barColor(componentScore: number): string {
-  if (componentScore < 30) return '#22c55e';
-  if (componentScore < 60) return '#eab308';
-  if (componentScore < 80) return '#f97316';
-  return '#ef4444';
+function barColor(score: number): string {
+  if (score < 30) return '#2F6B4F';
+  if (score < 60) return '#9A7A24';
+  if (score < 80) return '#B35C33';
+  return '#9E2B25';
 }
 
 export function ScoreBreakdown({ risk }: Props) {
@@ -30,48 +30,39 @@ export function ScoreBreakdown({ risk }: Props) {
   const entries = Object.entries(MARKER_META).filter(([k]) => breakdown[k] !== undefined);
 
   return (
-    <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
-        Score Breakdown
-      </h3>
-      <div className="space-y-2.5">
+    <div className="card p-6">
+      <div className="flex items-baseline justify-between mb-4">
+        <span className="eyebrow">Score Breakdown</span>
+        <span className="eyebrow">component · weight · contribution</span>
+      </div>
+
+      <div>
         {entries.map(([key, meta]) => {
           const raw = breakdown[key] ?? 0;
           const weighted = raw * meta.weight;
           const color = barColor(raw);
           return (
-            <div key={key}>
-              <div className="flex items-center justify-between mb-0.5">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ background: meta.color }}
-                  />
-                  <span className="text-xs text-slate-300">{meta.label}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-400 tabular-nums">
-                  <span className="font-mono">{raw.toFixed(0)}</span>
-                  <span className="text-slate-600">×{meta.weight}</span>
-                  <span className="font-semibold" style={{ color }}>
-                    {weighted.toFixed(1)}
-                  </span>
+            <div key={key} className="py-2.5" style={{ borderTop: '1px solid var(--line)' }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-ink" style={{ fontSize: '0.875rem' }}>{meta.label}</span>
+                <div className="flex items-center gap-4 font-mono tnum" style={{ fontSize: '0.75rem' }}>
+                  <span className="text-muted" style={{ width: 28, textAlign: 'right' }}>{raw.toFixed(0)}</span>
+                  <span className="text-faint" style={{ width: 36, textAlign: 'right' }}>×{meta.weight.toFixed(2)}</span>
+                  <span style={{ color, width: 36, textAlign: 'right', fontWeight: 500 }}>{weighted.toFixed(1)}</span>
                 </div>
               </div>
-              {/* Progress bar */}
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${Math.min(100, raw)}%`, background: color }}
-                />
+              <div className="h-px w-full" style={{ background: 'var(--line)' }}>
+                <div className="h-px" style={{ width: `${Math.min(100, raw)}%`, background: color }} />
               </div>
             </div>
           );
         })}
       </div>
-      <div className="mt-3 pt-2 flex justify-between text-xs" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <span className="text-slate-500">Weighted total (pre-adjustments)</span>
-        <span className="font-bold text-white tabular-nums">
-          {risk.raw_score.toFixed(1)} / 100
+
+      <div className="flex justify-between items-baseline mt-4 pt-3" style={{ borderTop: '1px solid var(--line2)' }}>
+        <span className="eyebrow">Weighted total · pre-adjustment</span>
+        <span className="font-mono tnum text-ink" style={{ fontSize: '0.9375rem', fontWeight: 500 }}>
+          {risk.raw_score.toFixed(1)} <span className="text-faint">/ 100</span>
         </span>
       </div>
     </div>
